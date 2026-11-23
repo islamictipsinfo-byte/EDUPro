@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureInstalled;
+use App\Http\Middleware\PermissionMiddleware;
 use App\Http\Middleware\RoleMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -14,11 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
         then: function () {
             require __DIR__.'/../routes/dashboard.php';
+            require __DIR__.'/../routes/account_management.php';
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [EnsureInstalled::class]);
-        $middleware->alias(['role' => RoleMiddleware::class]);
+        $middleware->alias(['role' => RoleMiddleware::class, 'permission' => PermissionMiddleware::class]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
