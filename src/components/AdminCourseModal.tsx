@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { resolveCourseCategories } from '../lib/batchEnterprise';
 import { calculateDiscountedPrice } from '../lib/domain';
 import type { Branch, Course, CourseLesson, CourseStatus, Instructor, LessonType } from '../types';
 import { ImageUploadField } from './ImageUploadField';
@@ -46,15 +47,6 @@ const THUMBNAIL_PRESETS = [
   },
 ];
 
-const CATEGORIES: Course['category'][] = [
-  'HSC English',
-  'SSC English',
-  'IELTS & Spoken',
-  'Grammar Pro',
-  'Admission',
-  'Combo Packs',
-];
-
 const LEVEL_PRESETS = ['HSC 27', 'HSC 28', 'SSC 26', 'SSC 27', 'IELTS', 'Spoken', 'Admission', 'All Levels'];
 
 export function AdminCourseModal({
@@ -67,8 +59,9 @@ export function AdminCourseModal({
   onClose,
   onSaved,
 }: AdminCourseModalProps) {
-  const { apiFetch } = useAuth();
+  const { bootstrap, apiFetch } = useAuth();
   const isEditing = Boolean(course);
+  const dynamicCategories = resolveCourseCategories(bootstrap?.categories ?? [], allCourses);
 
   const [tab, setTab] = useState<'details' | 'pricing' | 'curriculum' | 'lessons'>('details');
   const [saving, setSaving] = useState(false);
@@ -412,7 +405,7 @@ export function AdminCourseModal({
                       }}
                       className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm"
                     >
-                      {CATEGORIES.map((c) => (
+                      {dynamicCategories.map((c) => (
                         <option key={c} value={c}>
                           {c}
                         </option>

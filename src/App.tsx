@@ -25,6 +25,7 @@ function CustomCmsPage({ slug }: { slug: string }) {
   const page = (bootstrap?.settings.customPages ?? []).find(
     (p) => p.slug === slug && p.published
   );
+
   if (!page) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
@@ -35,6 +36,7 @@ function CustomCmsPage({ slug }: { slug: string }) {
       </div>
     );
   }
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-14 sm:px-6">
       {page.coverImage && (
@@ -94,7 +96,6 @@ function RouterShell() {
   const catParam = url.searchParams.get('cat') || 'All Courses';
 
   let pageNode = <HomePage navigate={navigate} />;
-
   if (pathname === '/courses') {
     pageNode = <CoursesPage navigate={navigate} initialCategory={catParam} />;
   } else if (pathname.startsWith('/course/') || pathname.startsWith('/courses/')) {

@@ -20,6 +20,36 @@
     </div>
 
     @if($user->role === 'admin')
+        @php
+            $dynamicCourseCats = collect($categories ?? [])->where('type', 'course')->where('active', true)->pluck('name')->all();
+            $courseCategoryOptions = array_values(array_unique(array_merge(['HSC English', 'SSC English', 'IELTS & Spoken', 'Grammar Pro', 'Admission', 'Combo Packs'], $dynamicCourseCats)));
+        @endphp
+        <div id="categories-studio" class="rounded-2xl bg-white border border-slate-200 p-6 mb-6">
+            <h2 class="text-lg font-extrabold text-slate-900">Course Categories Manager ({{ collect($categories ?? [])->where('type', 'course')->count() }})</h2>
+            <p class="text-xs text-slate-500 mb-4">Create new course categories here — active categories immediately appear in Course Creation, Editing, and Public Filtering.</p>
+            <form method="POST" action="{{ route('portal.categories.store') }}" class="flex flex-wrap items-center gap-3 mb-4">
+                @csrf
+                <input type="hidden" name="type" value="course">
+                <input type="text" name="name" required placeholder="New Category Name (e.g. BCS Special)" class="flex-1 min-w-[220px] rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs">
+                <button type="submit" class="rounded-xl bg-indigo-600 text-white px-4 py-2 text-xs font-bold">+ Add Course Category</button>
+            </form>
+            <div class="flex flex-wrap gap-2">
+                @foreach(collect($categories ?? [])->where('type', 'course') as $cat)
+                    <div class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs">
+                        <span class="font-bold text-slate-800">{{ $cat->name }}</span>
+                        <form method="POST" action="{{ route('portal.categories.toggle', $cat) }}" class="inline">
+                            @csrf @method('PATCH')
+                            <button type="submit" class="font-bold {{ $cat->active ? 'text-emerald-700' : 'text-slate-500' }}">{{ $cat->active ? 'Active' : 'Hidden' }}</button>
+                        </form>
+                        <form method="POST" action="{{ route('portal.categories.delete', $cat) }}" class="inline">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="text-rose-600 font-bold">×</button>
+                        </form>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+
         <div id="courses-studio" class="rounded-2xl bg-white border border-slate-200 p-6">
             <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
                 <div>
@@ -37,12 +67,9 @@
                     <input type="text" name="title" required placeholder="Course Title" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs">
                     <input type="text" name="subtitle" required placeholder="Subtitle" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs">
                     <select name="category" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs">
-                        <option value="HSC English">HSC English</option>
-                        <option value="SSC English">SSC English</option>
-                        <option value="IELTS & Spoken">IELTS & Spoken</option>
-                        <option value="Grammar Pro">Grammar Pro</option>
-                        <option value="Admission">Admission</option>
-                        <option value="Combo Packs">Combo Packs</option>
+                        @foreach($courseCategoryOptions as $catOpt)
+                            <option value="{{ $catOpt }}">{{ $catOpt }}</option>
+                        @endforeach
                     </select>
                     <input type="text" name="level_tag" required value="HSC 27" placeholder="Level Tag (e.g. HSC 27)" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs">
                     <input type="number" name="price" required value="1990" min="0" placeholder="Sale Price (৳)" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs">
@@ -100,7 +127,7 @@
                             <input type="text" name="title" required value="{{ $c->title }}" class="rounded-xl border border-slate-300 px-3 py-2 text-xs">
                             <input type="text" name="subtitle" required value="{{ $c->subtitle }}" class="rounded-xl border border-slate-300 px-3 py-2 text-xs">
                             <select name="category" class="rounded-xl border border-slate-300 px-3 py-2 text-xs">
-                                @foreach(['HSC English', 'SSC English', 'IELTS & Spoken', 'Grammar Pro', 'Admission', 'Combo Packs'] as $catOpt)
+                                @foreach(array_values(array_unique(array_merge($courseCategoryOptions, [$c->category]))) as $catOpt)
                                     <option value="{{ $catOpt }}" @selected($c->category === $catOpt)>{{ $catOpt }}</option>
                                 @endforeach
                             </select>

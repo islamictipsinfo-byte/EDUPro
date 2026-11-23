@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { CourseWizardModal } from '../components/courses/CourseWizardModal';
 import { useAuth } from '../context/AuthContext';
+import { resolveCourseCategories } from '../lib/batchEnterprise';
 import { isCourseStatusLive } from '../lib/courseEnterprise';
 import {
   calculateDiscountedPrice,
@@ -44,6 +45,13 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
   const { user, bootstrap, loadingBootstrap, apiFetch, refreshBootstrap } = useAuth();
   const isAdmin = user?.role === 'admin';
   const canManageCourses = user?.role === 'admin' || user?.role === 'teacher';
+
+  const dynamicFilterTabs = Array.from(
+    new Set([
+      ...FILTER_TABS,
+      ...resolveCourseCategories(bootstrap?.categories ?? [], bootstrap?.courses ?? []),
+    ])
+  );
 
   const [selectedCat, setSelectedCat] = useState(initialCategory);
   const [search, setSearch] = useState('');
@@ -249,7 +257,7 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
 
           {/* Category / Batch Filter Tabs */}
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
-            {FILTER_TABS.map((tab) => {
+            {dynamicFilterTabs.map((tab) => {
               const active = selectedCat === tab;
               return (
                 <button

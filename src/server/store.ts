@@ -7,6 +7,10 @@ import type {
   AttendanceRecord,
   AuditLogEntry,
   BackupSnapshot,
+  BatchActivityLog,
+  BatchNotification,
+  BatchTransferRecord,
+  BatchWaitlistEntry,
   Branch,
   BroadcastCampaign,
   CategoryItem,
@@ -75,6 +79,10 @@ export interface DatabaseState {
   instructors: Instructor[];
   courses: Course[];
   batches: CourseBatch[];
+  batchWaitlists: BatchWaitlistEntry[];
+  batchTransfers: BatchTransferRecord[];
+  batchNotifications: BatchNotification[];
+  batchActivityLogs: BatchActivityLog[];
   modules: CourseModule[];
   chapters: CourseChapter[];
   lessons: CourseLesson[];
@@ -1321,6 +1329,34 @@ function createInitialState(): DatabaseState {
     instructors,
     courses,
     batches,
+    batchWaitlists: [],
+    batchTransfers: [],
+    batchNotifications: [
+      {
+        id: 'bnot-seed-1',
+        batchId: 'bat-ssc-mpr-1',
+        courseId: 'crs-frpb-ssc',
+        type: 'batch_start',
+        title: 'SSC-27 Mirpur Evening Batch A — Class Routine Published',
+        message: 'Sun · Tue · Thu at 4:30 PM (Mirpur DOHS Room 201 + Online Hybrid). Please bring Grammar Practice Sheet 01.',
+        channel: 'in_app',
+        readByUserIds: [],
+        createdBy: 'Alomgir Hossain',
+        createdAt: '2026-04-04T09:00:00.000Z',
+      },
+    ],
+    batchActivityLogs: [
+      {
+        id: 'blog-seed-1',
+        batchId: 'bat-ssc-mpr-1',
+        actorId: 'u-admin',
+        actorName: 'Alomgir Hossain',
+        actorRole: 'admin',
+        action: 'BATCH_INITIALIZED',
+        details: 'Hybrid schedule & classroom Room 201 configured for SSC-27 Mirpur Evening Batch A.',
+        createdAt: '2026-04-01T10:00:00.000Z',
+      },
+    ],
     modules,
     chapters,
     lessons,
@@ -1569,6 +1605,25 @@ export function getDb(): DatabaseState {
       parsed.campaigns = parsed.campaigns ?? fallback.campaigns;
       parsed.plugins = parsed.plugins ?? fallback.plugins;
       parsed.webhooks = parsed.webhooks ?? fallback.webhooks;
+      if (!Array.isArray(parsed.batchWaitlists)) parsed.batchWaitlists = [];
+      if (!Array.isArray(parsed.batchTransfers)) parsed.batchTransfers = [];
+      if (!Array.isArray(parsed.batchNotifications)) parsed.batchNotifications = fallback.batchNotifications;
+      if (!Array.isArray(parsed.batchActivityLogs)) parsed.batchActivityLogs = fallback.batchActivityLogs;
+      parsed.batches = (parsed.batches ?? fallback.batches).map((b) => ({
+        ...b,
+        lifecycleStatus:
+          b.lifecycleStatus ??
+          (b.status === 'running'
+            ? 'active'
+            : b.status === 'closed'
+              ? 'enrollment_closed'
+              : 'enrollment_open'),
+        batchType:
+          b.batchType ??
+          (b.mode === 'Online Live' ? 'Online' : b.mode === 'Offline Branch' ? 'Offline' : 'Hybrid'),
+        waitlistEnabled: b.waitlistEnabled ?? true,
+        minStudents: b.minStudents ?? 10,
+      }));
       cachedState = parsed;
       return cachedState;
     } catch {

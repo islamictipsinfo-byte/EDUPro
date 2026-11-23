@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BatchEnterpriseController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ExamController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\PortalController;
@@ -53,6 +55,9 @@ Route::middleware('auth')->group(function () {
             Route::patch('/courses/{course}/status', [PortalController::class, 'toggleCourseStatus'])->name('portal.courses.status');
             Route::post('/courses/{course}/duplicate', [PortalController::class, 'duplicateCourse'])->name('portal.courses.duplicate');
             Route::delete('/courses/{course}', [PortalController::class, 'deleteCourse'])->name('portal.courses.delete');
+            Route::post('/categories', [CategoryController::class, 'store'])->name('portal.categories.store');
+            Route::patch('/categories/{category}/toggle', [CategoryController::class, 'toggle'])->name('portal.categories.toggle');
+            Route::delete('/categories/{category}', [CategoryController::class, 'destroy'])->name('portal.categories.delete');
             Route::post('/branches', [PortalController::class, 'storeBranch'])->name('portal.branches.store');
             Route::put('/branches/{branch}', [PortalController::class, 'updateBranch'])->name('portal.branches.update');
             Route::patch('/branches/{branch}/status', [PortalController::class, 'toggleBranchStatus'])->name('portal.branches.status');
@@ -85,6 +90,17 @@ Route::middleware('auth')->group(function () {
         Route::post('/rewards/privacy', [PortalController::class, 'toggleLeaderboardPrivacy'])->name('portal.rewards.privacy');
 
         Route::middleware('role:admin,teacher,branch_manager')->group(function () {
+            Route::get('/batches/dashboard', [BatchEnterpriseController::class, 'dashboard'])->name('portal.batches.dashboard');
+            Route::post('/batches/check-conflicts', [BatchEnterpriseController::class, 'checkConflicts'])->name('portal.batches.conflicts');
+            Route::post('/batches/enterprise', [BatchEnterpriseController::class, 'store'])->name('portal.batches.enterprise.store');
+            Route::put('/batches/{batch}/enterprise', [BatchEnterpriseController::class, 'update'])->name('portal.batches.enterprise.update');
+            Route::post('/batches/{batch}/students/enroll', [BatchEnterpriseController::class, 'enrollStudent'])->name('portal.batches.enroll');
+            Route::post('/batches/{batch}/students/transfer', [BatchEnterpriseController::class, 'transferStudent'])->name('portal.batches.transfer');
+            Route::post('/batches/{batch}/waitlist/{waitlist}/promote', [BatchEnterpriseController::class, 'promoteWaitlist'])->name('portal.batches.waitlist.promote');
+            Route::post('/batches/{batch}/attendance/bulk', [BatchEnterpriseController::class, 'bulkAttendance'])->name('portal.batches.attendance.bulk');
+            Route::post('/batches/{batch}/announcements', [BatchEnterpriseController::class, 'addAnnouncement'])->name('portal.batches.announcements.store');
+            Route::patch('/batches/{batch}/lifecycle', [BatchEnterpriseController::class, 'updateLifecycle'])->name('portal.batches.lifecycle');
+            Route::delete('/batches/{batch}/safe', [BatchEnterpriseController::class, 'safeDestroy'])->name('portal.batches.safe_delete');
             Route::post('/batches', [PortalController::class, 'storeBatch'])->name('portal.batches.store');
             Route::put('/batches/{batch}', [PortalController::class, 'updateBatch'])->name('portal.batches.update');
             Route::patch('/batches/{batch}/status', [PortalController::class, 'toggleBatchStatus'])->name('portal.batches.status');

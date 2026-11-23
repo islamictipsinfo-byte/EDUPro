@@ -18,7 +18,7 @@
             </form>
 
             <div class="mt-6 flex flex-wrap justify-center gap-2.5">
-                @foreach(['All Courses', 'Combos', 'HSC 27', 'SSC 27', 'IELTS & Spoken', 'Grammar Pro', 'Admission'] as $tab)
+                @foreach(($courseCategories ?? ['All Courses', 'Combos', 'HSC English', 'SSC English', 'IELTS & Spoken', 'Grammar Pro', 'Admission']) as $tab)
                     <a href="{{ route('courses.index', ['cat' => $tab, 'q' => $search, 'sort' => $sort]) }}"
                        class="rounded-full px-4 py-2 text-xs sm:text-sm font-bold transition-all {{ $category === $tab ? 'bg-indigo-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-700 hover:border-indigo-300' }}">
                         {{ $tab }}

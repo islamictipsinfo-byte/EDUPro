@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { resolveCourseCategories } from '../../lib/batchEnterprise';
 import {
   type CourseAnalyticsSummary,
   COURSE_TEMPLATES,
@@ -49,6 +50,7 @@ interface CourseEnterpriseDashboardProps {
   onArchiveToggle: (course: Course) => Promise<void>;
   onDeleteCourse: (courseId: string) => Promise<void>;
   onNavigate: (path: string) => void;
+  onManageCategories?: () => void;
   onRefresh: () => Promise<void>;
   onNotify: (msg: string) => void;
 }
@@ -68,10 +70,12 @@ export function CourseEnterpriseDashboard({
   onArchiveToggle,
   onDeleteCourse,
   onNavigate,
+  onManageCategories,
   onRefresh,
   onNotify,
 }: CourseEnterpriseDashboardProps) {
-  const { apiFetch, token } = useAuth();
+  const { bootstrap, apiFetch, token } = useAuth();
+  const dynamicCategories = resolveCourseCategories(bootstrap?.categories ?? [], courses);
   const [summary, setSummary] = useState<CourseAnalyticsSummary | null>(null);
   const [activities, setActivities] = useState<AuditLogEntry[]>([]);
   const [chartMetric, setChartMetric] = useState<'enrollments' | 'revenue'>('enrollments');
@@ -423,6 +427,16 @@ export function CourseEnterpriseDashboard({
               <Upload className="h-3.5 w-3.5" />
               <span>Bulk Import</span>
             </button>
+            {onManageCategories && userRole === 'admin' && (
+              <button
+                type="button"
+                onClick={onManageCategories}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>Manage Categories</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onOpenWizard(null, null)}
@@ -455,12 +469,11 @@ export function CourseEnterpriseDashboard({
           >
             <option value="all">All Categories</option>
             <option value="combos">Combos Only</option>
-            <option value="SSC English">SSC English</option>
-            <option value="HSC English">HSC English</option>
-            <option value="IELTS & Spoken">IELTS &amp; Spoken</option>
-            <option value="Grammar Pro">Grammar Pro</option>
-            <option value="Admission">Admission</option>
-            <option value="Combo Packs">Combo Packs</option>
+            {dynamicCategories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
           </select>
           <select
             value={statusFilter}

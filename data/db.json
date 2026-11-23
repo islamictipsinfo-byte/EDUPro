@@ -387,7 +387,7 @@
       "avatar": "/src/assets/images/instructor_portrait_lead_1795411661581.jpg",
       "passwordHash": "24c63201f276f829c998de5936de3528:4aca2307c611696b9f1b59013e2432ca6cf363b9f43d9d3d6da5101d2694589e31ac15749a3a8e27523f56395503ca8626141f186f47a925dfb84661bc990502",
       "createdAt": "2026-01-05T09:00:00.000Z",
-      "lastLoginAt": "2026-11-23T14:37:38.730Z"
+      "lastLoginAt": "2026-11-23T16:19:27.700Z"
     },
     {
       "id": "u-manager",
@@ -409,7 +409,7 @@
       "avatar": "/src/assets/images/instructor_portrait_lead_1795411661581.jpg",
       "passwordHash": "6e4cfb8e4758de2501090772894f60c1:ae3f4a5d353c144e843b611128c6415e58ded4db2f5a7a2ff01773df74f34ac7b35976c05dd89bf63d7221939329ba226da62d5845baee62cc7c97fb18cdd26a",
       "createdAt": "2026-01-07T09:00:00.000Z",
-      "lastLoginAt": "2026-11-23T14:37:29.983Z"
+      "lastLoginAt": "2026-11-23T16:19:55.693Z"
     },
     {
       "id": "u-student",
@@ -421,7 +421,7 @@
       "rollNumber": "AEC-2026-101",
       "passwordHash": "bd31d94d5aaac33b6f37ff70d57e63be:6179786348dab26c1f8753c18aeb9d6180439ddd3876fb7fa84aa9b9632c9549b3ec1d0b84d3ba37ccd6e8f82d52a2e77c37b53a0080e9c3db2b88d4dd9568c1",
       "createdAt": "2026-01-10T09:00:00.000Z",
-      "lastLoginAt": "2026-11-23T14:35:25.800Z",
+      "lastLoginAt": "2026-11-23T16:20:16.162Z",
       "bio": "Preparing for HSC 2027 & IELTS Band 7.5"
     },
     {
@@ -459,7 +459,8 @@
       "panel": "Head Faculty",
       "branchId": "br-mirpur",
       "bio": "12+ years coaching HSC, SSC, IELTS Band 8+ and University Admission English across Bangladesh.",
-      "avatar": "/src/assets/images/instructor_portrait_lead_1795411661581.jpg"
+      "avatar": "/src/assets/images/instructor_portrait_lead_1795411661581.jpg",
+      "userId": "u-admin"
     },
     {
       "id": "inst-2",
@@ -470,7 +471,8 @@
       "panel": "Head Faculty",
       "branchId": "br-mirpur",
       "bio": "Specialist in Right Form of Verbs, Modifiers, Clauses, and DU B-Unit English.",
-      "avatar": "/src/assets/images/hero_hsc_english_1795411661478.jpg"
+      "avatar": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "userId": "u-teacher"
     },
     {
       "id": "inst-3",
@@ -519,6 +521,538 @@
   ],
   "courses": [
     {
+      "id": "crs-1795450695121",
+      "slug": "bcs-english-master-4107",
+      "title": "BCS English Master 4107",
+      "subtitle": "Structured BCS Written & MCQ English Prep",
+      "category": "BCS Special 4107",
+      "levelTag": "HSC 27",
+      "level": "Intermediate",
+      "courseType": "Hybrid",
+      "language": "Bangla & English",
+      "tags": [
+        "English",
+        "Board Exam",
+        "Grammar"
+      ],
+      "isCombo": false,
+      "price": 1990,
+      "originalPrice": 3500,
+      "admissionFee": 0,
+      "installmentEnabled": false,
+      "installmentCount": 2,
+      "paymentPolicy": "Full refund eligible within 7 days before batch commencement.",
+      "isFree": false,
+      "couponEligible": true,
+      "durationLabel": "4 Months",
+      "totalClasses": 40,
+      "estimatedHours": 60,
+      "minEnrollment": 5,
+      "prerequisites": [
+        "Basic reading & writing comprehension"
+      ],
+      "learningOutcomes": [
+        "Master core grammar rules and exam writing formats",
+        "Score higher in weekly MCQ & CQ mocks"
+      ],
+      "targetAudience": [
+        "SSC / HSC & Academic English students"
+      ],
+      "examSystemIncluded": true,
+      "branchIds": [
+        "br-mirpur",
+        "br-uttara",
+        "br-ctg"
+      ],
+      "instructorIds": [
+        "inst-1"
+      ],
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "description": "Complete BCS English preparation with live batch mentorship, modules, and exams.",
+      "highlights": [
+        "Structured Bilingual Live & Recorded Lectures",
+        "Printable PDF Practice Sheets",
+        "Automated Weekly MCQ Evaluation"
+      ],
+      "demoVideoTitle": "BCS English Master 4107 — Orientation",
+      "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+      "status": "published",
+      "featured": false,
+      "visibility": "public",
+      "enrollmentAvailability": "open",
+      "sequentialAccess": false,
+      "certificateCriteria": {
+        "enabled": true,
+        "minProgressPercent": 80,
+        "requireExamPass": false,
+        "minExamPercent": 50,
+        "requireAssignmentCompletion": false
+      },
+      "seo": {
+        "noIndex": false
+      },
+      "createdByUserId": "u-admin",
+      "enrolledCount": 1,
+      "createdAt": "2026-11-23T16:18:15.121Z",
+      "updatedAt": "2026-11-23T16:18:15.121Z"
+    },
+    {
+      "id": "crs-1795450556062",
+      "slug": "bcs-english-master-4936",
+      "title": "BCS English Master 4936",
+      "subtitle": "Structured BCS Written & MCQ English Prep",
+      "category": "BCS Special 4936",
+      "levelTag": "HSC 27",
+      "level": "Intermediate",
+      "courseType": "Hybrid",
+      "language": "Bangla & English",
+      "tags": [
+        "English",
+        "Board Exam",
+        "Grammar"
+      ],
+      "isCombo": false,
+      "price": 1990,
+      "originalPrice": 3500,
+      "admissionFee": 0,
+      "installmentEnabled": false,
+      "installmentCount": 2,
+      "paymentPolicy": "Full refund eligible within 7 days before batch commencement.",
+      "isFree": false,
+      "couponEligible": true,
+      "durationLabel": "4 Months",
+      "totalClasses": 40,
+      "estimatedHours": 60,
+      "minEnrollment": 5,
+      "prerequisites": [
+        "Basic reading & writing comprehension"
+      ],
+      "learningOutcomes": [
+        "Master core grammar rules and exam writing formats",
+        "Score higher in weekly MCQ & CQ mocks"
+      ],
+      "targetAudience": [
+        "SSC / HSC & Academic English students"
+      ],
+      "examSystemIncluded": true,
+      "branchIds": [
+        "br-mirpur",
+        "br-uttara",
+        "br-ctg"
+      ],
+      "instructorIds": [
+        "inst-1"
+      ],
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "description": "Complete BCS English preparation with live batch mentorship, modules, and exams.",
+      "highlights": [
+        "Structured Bilingual Live & Recorded Lectures",
+        "Printable PDF Practice Sheets",
+        "Automated Weekly MCQ Evaluation"
+      ],
+      "demoVideoTitle": "BCS English Master 4936 — Orientation",
+      "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+      "status": "published",
+      "featured": false,
+      "visibility": "public",
+      "enrollmentAvailability": "open",
+      "sequentialAccess": false,
+      "certificateCriteria": {
+        "enabled": true,
+        "minProgressPercent": 80,
+        "requireExamPass": false,
+        "minExamPercent": 50,
+        "requireAssignmentCompletion": false
+      },
+      "seo": {
+        "noIndex": false
+      },
+      "createdByUserId": "u-admin",
+      "enrolledCount": 0,
+      "createdAt": "2026-11-23T16:15:56.062Z",
+      "updatedAt": "2026-11-23T16:15:56.062Z"
+    },
+    {
+      "id": "crs-1795450502892",
+      "slug": "bcs-english-master-1732",
+      "title": "BCS English Master 1732",
+      "subtitle": "Structured BCS Written & MCQ English Prep",
+      "category": "BCS Special 1732",
+      "levelTag": "HSC 27",
+      "level": "Intermediate",
+      "courseType": "Hybrid",
+      "language": "Bangla & English",
+      "tags": [
+        "English",
+        "Board Exam",
+        "Grammar"
+      ],
+      "isCombo": false,
+      "price": 1990,
+      "originalPrice": 3500,
+      "admissionFee": 0,
+      "installmentEnabled": false,
+      "installmentCount": 2,
+      "paymentPolicy": "Full refund eligible within 7 days before batch commencement.",
+      "isFree": false,
+      "couponEligible": true,
+      "durationLabel": "4 Months",
+      "totalClasses": 40,
+      "estimatedHours": 60,
+      "minEnrollment": 5,
+      "prerequisites": [
+        "Basic reading & writing comprehension"
+      ],
+      "learningOutcomes": [
+        "Master core grammar rules and exam writing formats",
+        "Score higher in weekly MCQ & CQ mocks"
+      ],
+      "targetAudience": [
+        "SSC / HSC & Academic English students"
+      ],
+      "examSystemIncluded": true,
+      "branchIds": [
+        "br-mirpur",
+        "br-uttara",
+        "br-ctg"
+      ],
+      "instructorIds": [
+        "inst-1"
+      ],
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "description": "Complete BCS English preparation with live batch mentorship, modules, and exams.",
+      "highlights": [
+        "Structured Bilingual Live & Recorded Lectures",
+        "Printable PDF Practice Sheets",
+        "Automated Weekly MCQ Evaluation"
+      ],
+      "demoVideoTitle": "BCS English Master 1732 — Orientation",
+      "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+      "status": "published",
+      "featured": false,
+      "visibility": "public",
+      "enrollmentAvailability": "open",
+      "sequentialAccess": false,
+      "certificateCriteria": {
+        "enabled": true,
+        "minProgressPercent": 80,
+        "requireExamPass": false,
+        "minExamPercent": 50,
+        "requireAssignmentCompletion": false
+      },
+      "seo": {
+        "noIndex": false
+      },
+      "createdByUserId": "u-admin",
+      "enrolledCount": 0,
+      "createdAt": "2026-11-23T16:15:02.892Z",
+      "updatedAt": "2026-11-23T16:15:02.892Z"
+    },
+    {
+      "id": "crs-1795450407750",
+      "slug": "bcs-english-master-6691",
+      "title": "BCS English Master 6691",
+      "subtitle": "Structured BCS Written & MCQ English Prep",
+      "category": "BCS Special 6691",
+      "levelTag": "HSC 27",
+      "level": "Intermediate",
+      "courseType": "Hybrid",
+      "language": "Bangla & English",
+      "tags": [
+        "English",
+        "Board Exam",
+        "Grammar"
+      ],
+      "isCombo": false,
+      "price": 1990,
+      "originalPrice": 3500,
+      "admissionFee": 0,
+      "installmentEnabled": false,
+      "installmentCount": 2,
+      "paymentPolicy": "Full refund eligible within 7 days before batch commencement.",
+      "isFree": false,
+      "couponEligible": true,
+      "durationLabel": "4 Months",
+      "totalClasses": 40,
+      "estimatedHours": 60,
+      "minEnrollment": 5,
+      "prerequisites": [
+        "Basic reading & writing comprehension"
+      ],
+      "learningOutcomes": [
+        "Master core grammar rules and exam writing formats",
+        "Score higher in weekly MCQ & CQ mocks"
+      ],
+      "targetAudience": [
+        "SSC / HSC & Academic English students"
+      ],
+      "examSystemIncluded": true,
+      "branchIds": [
+        "br-mirpur",
+        "br-uttara",
+        "br-ctg"
+      ],
+      "instructorIds": [
+        "inst-1"
+      ],
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "description": "Complete BCS English preparation with live batch mentorship, modules, and exams.",
+      "highlights": [
+        "Structured Bilingual Live & Recorded Lectures",
+        "Printable PDF Practice Sheets",
+        "Automated Weekly MCQ Evaluation"
+      ],
+      "demoVideoTitle": "BCS English Master 6691 — Orientation",
+      "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+      "status": "published",
+      "featured": false,
+      "visibility": "public",
+      "enrollmentAvailability": "open",
+      "sequentialAccess": false,
+      "certificateCriteria": {
+        "enabled": true,
+        "minProgressPercent": 80,
+        "requireExamPass": false,
+        "minExamPercent": 50,
+        "requireAssignmentCompletion": false
+      },
+      "seo": {
+        "noIndex": false
+      },
+      "createdByUserId": "u-admin",
+      "enrolledCount": 0,
+      "createdAt": "2026-11-23T16:13:27.750Z",
+      "updatedAt": "2026-11-23T16:13:27.750Z"
+    },
+    {
+      "id": "crs-1795450375818",
+      "slug": "bcs-english-master-4629",
+      "title": "BCS English Master 4629",
+      "subtitle": "Structured BCS Written & MCQ English Prep",
+      "category": "BCS Special 4629",
+      "levelTag": "HSC 27",
+      "level": "Intermediate",
+      "courseType": "Hybrid",
+      "language": "Bangla & English",
+      "tags": [
+        "English",
+        "Board Exam",
+        "Grammar"
+      ],
+      "isCombo": false,
+      "price": 1990,
+      "originalPrice": 3500,
+      "admissionFee": 0,
+      "installmentEnabled": false,
+      "installmentCount": 2,
+      "paymentPolicy": "Full refund eligible within 7 days before batch commencement.",
+      "isFree": false,
+      "couponEligible": true,
+      "durationLabel": "4 Months",
+      "totalClasses": 40,
+      "estimatedHours": 60,
+      "minEnrollment": 5,
+      "prerequisites": [
+        "Basic reading & writing comprehension"
+      ],
+      "learningOutcomes": [
+        "Master core grammar rules and exam writing formats",
+        "Score higher in weekly MCQ & CQ mocks"
+      ],
+      "targetAudience": [
+        "SSC / HSC & Academic English students"
+      ],
+      "examSystemIncluded": true,
+      "branchIds": [
+        "br-mirpur",
+        "br-uttara",
+        "br-ctg"
+      ],
+      "instructorIds": [
+        "inst-1"
+      ],
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "description": "Complete BCS English preparation with live batch mentorship, modules, and exams.",
+      "highlights": [
+        "Structured Bilingual Live & Recorded Lectures",
+        "Printable PDF Practice Sheets",
+        "Automated Weekly MCQ Evaluation"
+      ],
+      "demoVideoTitle": "BCS English Master 4629 — Orientation",
+      "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+      "status": "published",
+      "featured": false,
+      "visibility": "public",
+      "enrollmentAvailability": "open",
+      "sequentialAccess": false,
+      "certificateCriteria": {
+        "enabled": true,
+        "minProgressPercent": 80,
+        "requireExamPass": false,
+        "minExamPercent": 50,
+        "requireAssignmentCompletion": false
+      },
+      "seo": {
+        "noIndex": false
+      },
+      "createdByUserId": "u-admin",
+      "enrolledCount": 0,
+      "createdAt": "2026-11-23T16:12:55.818Z",
+      "updatedAt": "2026-11-23T16:12:55.818Z"
+    },
+    {
+      "id": "crs-1795450294158",
+      "slug": "bcs-english-master-3111",
+      "title": "BCS English Master 3111",
+      "subtitle": "Structured BCS Written & MCQ English Prep",
+      "category": "BCS Special 3111",
+      "levelTag": "HSC 27",
+      "level": "Intermediate",
+      "courseType": "Hybrid",
+      "language": "Bangla & English",
+      "tags": [
+        "English",
+        "Board Exam",
+        "Grammar"
+      ],
+      "isCombo": false,
+      "price": 1990,
+      "originalPrice": 3500,
+      "admissionFee": 0,
+      "installmentEnabled": false,
+      "installmentCount": 2,
+      "paymentPolicy": "Full refund eligible within 7 days before batch commencement.",
+      "isFree": false,
+      "couponEligible": true,
+      "durationLabel": "4 Months",
+      "totalClasses": 40,
+      "estimatedHours": 60,
+      "minEnrollment": 5,
+      "prerequisites": [
+        "Basic reading & writing comprehension"
+      ],
+      "learningOutcomes": [
+        "Master core grammar rules and exam writing formats",
+        "Score higher in weekly MCQ & CQ mocks"
+      ],
+      "targetAudience": [
+        "SSC / HSC & Academic English students"
+      ],
+      "examSystemIncluded": true,
+      "branchIds": [
+        "br-mirpur",
+        "br-uttara",
+        "br-ctg"
+      ],
+      "instructorIds": [
+        "inst-1"
+      ],
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "description": "Complete BCS English preparation with live batch mentorship, modules, and exams.",
+      "highlights": [
+        "Structured Bilingual Live & Recorded Lectures",
+        "Printable PDF Practice Sheets",
+        "Automated Weekly MCQ Evaluation"
+      ],
+      "demoVideoTitle": "BCS English Master 3111 — Orientation",
+      "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+      "status": "published",
+      "featured": false,
+      "visibility": "public",
+      "enrollmentAvailability": "open",
+      "sequentialAccess": false,
+      "certificateCriteria": {
+        "enabled": true,
+        "minProgressPercent": 80,
+        "requireExamPass": false,
+        "minExamPercent": 50,
+        "requireAssignmentCompletion": false
+      },
+      "seo": {
+        "noIndex": false
+      },
+      "createdByUserId": "u-admin",
+      "enrolledCount": 0,
+      "createdAt": "2026-11-23T16:11:34.158Z",
+      "updatedAt": "2026-11-23T16:11:34.158Z"
+    },
+    {
+      "id": "crs-1795450224566",
+      "slug": "bcs-english-master-3500",
+      "title": "BCS English Master 3500",
+      "subtitle": "Structured BCS Written & MCQ English Prep",
+      "category": "BCS Special 3500",
+      "levelTag": "HSC 27",
+      "level": "Intermediate",
+      "courseType": "Hybrid",
+      "language": "Bangla & English",
+      "tags": [
+        "English",
+        "Board Exam",
+        "Grammar"
+      ],
+      "isCombo": false,
+      "price": 1990,
+      "originalPrice": 3500,
+      "admissionFee": 0,
+      "installmentEnabled": false,
+      "installmentCount": 2,
+      "paymentPolicy": "Full refund eligible within 7 days before batch commencement.",
+      "isFree": false,
+      "couponEligible": true,
+      "durationLabel": "4 Months",
+      "totalClasses": 40,
+      "estimatedHours": 60,
+      "minEnrollment": 5,
+      "prerequisites": [
+        "Basic reading & writing comprehension"
+      ],
+      "learningOutcomes": [
+        "Master core grammar rules and exam writing formats",
+        "Score higher in weekly MCQ & CQ mocks"
+      ],
+      "targetAudience": [
+        "SSC / HSC & Academic English students"
+      ],
+      "examSystemIncluded": true,
+      "branchIds": [
+        "br-mirpur",
+        "br-uttara",
+        "br-ctg"
+      ],
+      "instructorIds": [
+        "inst-1"
+      ],
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "description": "Complete BCS English preparation with live batch mentorship, modules, and exams.",
+      "highlights": [
+        "Structured Bilingual Live & Recorded Lectures",
+        "Printable PDF Practice Sheets",
+        "Automated Weekly MCQ Evaluation"
+      ],
+      "demoVideoTitle": "BCS English Master 3500 — Orientation",
+      "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+      "status": "published",
+      "featured": false,
+      "visibility": "public",
+      "enrollmentAvailability": "open",
+      "sequentialAccess": false,
+      "certificateCriteria": {
+        "enabled": true,
+        "minProgressPercent": 80,
+        "requireExamPass": false,
+        "minExamPercent": 50,
+        "requireAssignmentCompletion": false
+      },
+      "seo": {
+        "noIndex": false
+      },
+      "createdByUserId": "u-admin",
+      "enrolledCount": 0,
+      "createdAt": "2026-11-23T16:10:24.566Z",
+      "updatedAt": "2026-11-23T16:10:24.566Z"
+    },
+    {
       "id": "crs-1795440023167",
       "slug": "how-to-score-95-in-hsc-english-2nd-paper-modifier-connector-questions",
       "title": "How to Score 95+ in HSC English 2nd Paper Modifier & Connector Questions",
@@ -546,7 +1080,9 @@
       "demoVideoTitle": "How to Score 95+ in HSC English 2nd Paper Modifier & Connector Questions — Intro Class",
       "demoYoutubeUrl": "https://www.youtube.com/embed/dQw4w9WgXcQ",
       "status": "active",
-      "sourcePostId": "post-1"
+      "sourcePostId": "post-1",
+      "visibility": "public",
+      "enrollmentAvailability": "open"
     },
     {
       "id": "crs-frpb-ssc",
@@ -580,7 +1116,9 @@
       ],
       "demoVideoTitle": "SSC English 2nd Paper: Completing Sentence & Suffix-Prefix Tricks",
       "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-      "status": "active"
+      "status": "active",
+      "visibility": "public",
+      "enrollmentAvailability": "open"
     },
     {
       "id": "crs-hsc-combo",
@@ -619,7 +1157,9 @@
       ],
       "demoVideoTitle": "HSC Modifiers & Connectors in 20 Minutes",
       "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-      "status": "active"
+      "status": "active",
+      "visibility": "public",
+      "enrollmentAvailability": "open"
     },
     {
       "id": "crs-ielts-pro",
@@ -652,7 +1192,9 @@
       ],
       "demoVideoTitle": "IELTS Writing Task 2: How to Score Band 8 in Coherence",
       "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-      "status": "active"
+      "status": "active",
+      "visibility": "public",
+      "enrollmentAvailability": "open"
     },
     {
       "id": "crs-spoken-fluency",
@@ -684,7 +1226,9 @@
       ],
       "demoVideoTitle": "How to Think in English Without Translating Word by Word",
       "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-      "status": "active"
+      "status": "active",
+      "visibility": "public",
+      "enrollmentAvailability": "open"
     },
     {
       "id": "crs-grammar-pro",
@@ -716,7 +1260,9 @@
       ],
       "demoVideoTitle": "Parts of Speech & Clause Identification Shortcut",
       "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-      "status": "active"
+      "status": "active",
+      "visibility": "public",
+      "enrollmentAvailability": "open"
     },
     {
       "id": "crs-admission-du",
@@ -748,10 +1294,1169 @@
       ],
       "demoVideoTitle": "DU B-Unit Pinpoint Error Detection Strategy",
       "demoYoutubeUrl": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-      "status": "active"
+      "status": "active",
+      "visibility": "public",
+      "enrollmentAvailability": "open"
     }
   ],
   "batches": [
+    {
+      "id": "bat-1795450697804",
+      "courseId": "crs-1795450695121",
+      "name": "BCS Beta 4107",
+      "code": "BET-4107",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-1",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-1",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:18:17.801Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795450697804",
+          "instructorId": "inst-1",
+          "instructorName": "Alomgir Hossain",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:18:17.804Z"
+        }
+      ],
+      "schedule": "Fri — 18:00–19:15",
+      "schedules": [
+        {
+          "id": "slot-1795450696995-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Fri",
+          "startTime": "18:00",
+          "endTime": "19:15",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 204",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 702-4107",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 702-4107"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 0,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-12-18",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-11-30",
+      "endDate": "2027-04-22",
+      "enrollmentStartDate": "2026-11-23",
+      "enrollmentClosingDate": "2026-12-23",
+      "enrollmentDeadline": "2027-01-07",
+      "seatLimit": 40,
+      "minStudents": 8,
+      "enrolledSeats": 1,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:18:17.804Z",
+      "updatedAt": "2026-11-23T16:18:17.804Z"
+    },
+    {
+      "id": "bat-1795450696642",
+      "courseId": "crs-1795450695121",
+      "name": "BCS Alpha 4107",
+      "code": "ALP-4107",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-1",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-1",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:18:16.637Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795450696642",
+          "instructorId": "inst-1",
+          "instructorName": "Alomgir Hossain",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:18:16.642Z"
+        }
+      ],
+      "schedule": "Thu — 18:00–19:15",
+      "schedules": [
+        {
+          "id": "slot-1795450695907-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Thu",
+          "startTime": "18:00",
+          "endTime": "19:15",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 204",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 701-4107",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 701-4107"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 0,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-12-18",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-11-30",
+      "endDate": "2027-04-22",
+      "enrollmentStartDate": "2026-11-23",
+      "enrollmentClosingDate": "2026-12-23",
+      "enrollmentDeadline": "2027-01-07",
+      "seatLimit": 25,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:18:16.642Z",
+      "updatedAt": "2026-11-23T16:18:16.642Z"
+    },
+    {
+      "id": "bat-1795450558765",
+      "courseId": "crs-1795450556062",
+      "name": "BCS Beta 4936",
+      "code": "BET-4936",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-1",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-1",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:15:58.763Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795450558765",
+          "instructorId": "inst-1",
+          "instructorName": "Alomgir Hossain",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:15:58.765Z"
+        }
+      ],
+      "schedule": "Wed — 15:00–16:15",
+      "schedules": [
+        {
+          "id": "slot-1795450557953-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Wed",
+          "startTime": "15:00",
+          "endTime": "16:15",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 204",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 602-4936",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 602-4936"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 0,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 40,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:15:58.765Z",
+      "updatedAt": "2026-11-23T16:15:58.765Z"
+    },
+    {
+      "id": "bat-1795450557645",
+      "courseId": "crs-1795450556062",
+      "name": "BCS Alpha 4936",
+      "code": "ALP-4936",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-1",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-1",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:15:57.641Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795450557645",
+          "instructorId": "inst-1",
+          "instructorName": "Alomgir Hossain",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:15:57.645Z"
+        }
+      ],
+      "schedule": "Sat — 15:00–16:15",
+      "schedules": [
+        {
+          "id": "slot-1795450556851-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Sat",
+          "startTime": "15:00",
+          "endTime": "16:15",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 204",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 601-4936",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 601-4936"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 0,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 25,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:15:57.645Z",
+      "updatedAt": "2026-11-23T16:15:57.645Z"
+    },
+    {
+      "id": "bat-1795450505717",
+      "courseId": "crs-1795450502892",
+      "name": "BCS Beta 1732",
+      "code": "BET-1732",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-1",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-1",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:15:05.711Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795450505717",
+          "instructorId": "inst-1",
+          "instructorName": "Alomgir Hossain",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:15:05.717Z"
+        }
+      ],
+      "schedule": "Wed — 17:00–18:15",
+      "schedules": [
+        {
+          "id": "slot-1795450504835-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Wed",
+          "startTime": "17:00",
+          "endTime": "18:15",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 204",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 602-1732",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 602-1732"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 0,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 40,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:15:05.717Z",
+      "updatedAt": "2026-11-23T16:15:05.717Z"
+    },
+    {
+      "id": "bat-1795450504497",
+      "courseId": "crs-1795450502892",
+      "name": "BCS Alpha 1732",
+      "code": "ALP-1732",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-1",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-1",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:15:04.489Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795450504497",
+          "instructorId": "inst-1",
+          "instructorName": "Alomgir Hossain",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:15:04.497Z"
+        }
+      ],
+      "schedule": "Sat — 17:00–18:15",
+      "schedules": [
+        {
+          "id": "slot-1795450503721-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Sat",
+          "startTime": "17:00",
+          "endTime": "18:15",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 204",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 601-1732",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 601-1732"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 0,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 25,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:15:04.497Z",
+      "updatedAt": "2026-11-23T16:15:04.497Z"
+    },
+    {
+      "id": "bat-1795450410585",
+      "courseId": "crs-1795450407750",
+      "name": "BCS Beta 6691",
+      "code": "BET-6691",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-1",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-1",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:13:30.581Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795450410585",
+          "instructorId": "inst-1",
+          "instructorName": "Alomgir Hossain",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:13:30.585Z"
+        }
+      ],
+      "schedule": "Wed — 19:00–20:30",
+      "schedules": [
+        {
+          "id": "slot-1795450409721-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Wed",
+          "startTime": "19:00",
+          "endTime": "20:30",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 204",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 502-6691",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 502-6691"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 0,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 40,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:13:30.585Z",
+      "updatedAt": "2026-11-23T16:13:30.585Z"
+    },
+    {
+      "id": "bat-1795450409434",
+      "courseId": "crs-1795450407750",
+      "name": "BCS Alpha 6691",
+      "code": "ALP-6691",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-1",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-1",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:13:29.430Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795450409434",
+          "instructorId": "inst-1",
+          "instructorName": "Alomgir Hossain",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:13:29.434Z"
+        }
+      ],
+      "schedule": "Sat — 19:00–20:30",
+      "schedules": [
+        {
+          "id": "slot-1795450408557-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Sat",
+          "startTime": "19:00",
+          "endTime": "20:30",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 204",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 501-6691",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 501-6691"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 0,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 25,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:13:29.434Z",
+      "updatedAt": "2026-11-23T16:13:29.434Z"
+    },
+    {
+      "id": "bat-1795449753244",
+      "courseId": "crs-1795440023167",
+      "name": "BCS Beta 8462",
+      "code": "BCS-B8462",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-2",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-2",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:02:33.241Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795449753244",
+          "instructorId": "inst-2",
+          "instructorName": "Mahmudul Hasan",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:02:33.244Z"
+        }
+      ],
+      "schedule": "Thu — 09:00–10:30",
+      "schedules": [
+        {
+          "id": "slot-1795449752353-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Thu",
+          "startTime": "09:00",
+          "endTime": "10:30",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 405",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 405",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 405"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 500,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 40,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:02:33.244Z",
+      "updatedAt": "2026-11-23T16:02:33.244Z"
+    },
+    {
+      "id": "bat-1795449693045",
+      "courseId": "crs-1795440023167",
+      "name": "BCS Beta 8399",
+      "code": "BCS-B8399",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-2",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-2",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:01:33.042Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795449693045",
+          "instructorId": "inst-2",
+          "instructorName": "Mahmudul Hasan",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:01:33.045Z"
+        }
+      ],
+      "schedule": "Tue — 09:00–10:30",
+      "schedules": [
+        {
+          "id": "slot-1795449692124-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Tue",
+          "startTime": "09:00",
+          "endTime": "10:30",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 405",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 405",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 405"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 500,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 40,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:01:33.045Z",
+      "updatedAt": "2026-11-23T16:01:33.045Z"
+    },
+    {
+      "id": "bat-1795449691878",
+      "courseId": "crs-1795440023167",
+      "name": "BCS Alpha 8399",
+      "code": "BCS-A8399",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-2",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-2",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T16:01:31.875Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795449691878",
+          "instructorId": "inst-2",
+          "instructorName": "Mahmudul Hasan",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T16:01:31.878Z"
+        }
+      ],
+      "schedule": "Mon — 09:00–10:30",
+      "schedules": [
+        {
+          "id": "slot-1795449691096-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Mon",
+          "startTime": "09:00",
+          "endTime": "10:30",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 301",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 301",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 301"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 500,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 30,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T16:01:31.878Z",
+      "updatedAt": "2026-11-23T16:01:31.878Z"
+    },
+    {
+      "id": "bat-1795449545816",
+      "courseId": "crs-1795440023167",
+      "name": "BCS Beta 4332",
+      "code": "BCS-B4332",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-2",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-2",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T15:59:05.813Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795449545816",
+          "instructorId": "inst-2",
+          "instructorName": "Mahmudul Hasan",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T15:59:05.816Z"
+        }
+      ],
+      "schedule": "Fri — 15:00–16:30",
+      "schedules": [
+        {
+          "id": "slot-1795449543004-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Fri",
+          "startTime": "15:00",
+          "endTime": "16:30",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 301",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "204",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "204"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 500,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 40,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T15:59:05.816Z",
+      "updatedAt": "2026-11-23T15:59:05.816Z"
+    },
+    {
+      "id": "bat-1795449542407",
+      "courseId": "crs-1795440023167",
+      "name": "BCS Alpha 4332",
+      "code": "BCS-A4332",
+      "description": "",
+      "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "branchId": "br-mirpur",
+      "instructorId": "inst-2",
+      "assistantInstructorId": null,
+      "teacherAssignments": [
+        {
+          "instructorId": "inst-2",
+          "role": "main",
+          "responsibility": "Lead Instruction & Syllabus Delivery",
+          "assignedAt": "2026-11-23T15:59:02.397Z"
+        }
+      ],
+      "teacherAssignmentHistory": [
+        {
+          "id": "bth-1795449542407",
+          "instructorId": "inst-2",
+          "instructorName": "Mahmudul Hasan",
+          "role": "main",
+          "action": "assigned",
+          "note": "Initial batch creation assignment",
+          "actorName": "Alomgir Hossain",
+          "at": "2026-11-23T15:59:02.407Z"
+        }
+      ],
+      "schedule": "Sun — 15:00–16:30",
+      "schedules": [
+        {
+          "id": "slot-1795449517210-1",
+          "title": "Lecture Session 1",
+          "dayOfWeek": "Sun",
+          "startTime": "15:00",
+          "endTime": "16:30",
+          "durationMinutes": 90,
+          "breakMinutes": 10,
+          "instructorId": "inst-1",
+          "roomLabel": "Room 301",
+          "status": "scheduled"
+        }
+      ],
+      "classDurationMinutes": 90,
+      "breakMinutes": 10,
+      "weeklyFrequency": 3,
+      "totalClasses": 36,
+      "classroomOrMeeting": "Room 301",
+      "classroom": {
+        "classroomName": "Academic Hall A",
+        "building": "Main Campus",
+        "floor": "2nd Floor",
+        "roomNumber": "Room 301"
+      },
+      "onlineSettings": {
+        "platform": "Zoom",
+        "meetingLink": "",
+        "meetingId": "",
+        "meetingPassword": "",
+        "instructions": "Join 5 minutes prior to class start with your registered full name."
+      },
+      "feeSettings": {
+        "admissionFee": 500,
+        "monthlyFee": 1500,
+        "courseFeeOverride": null,
+        "installmentEnabled": true,
+        "installmentOptions": "2 Monthly Installments (50% + 50%)",
+        "paymentDeadline": "2026-05-15",
+        "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+        "batchDiscountPercent": 0
+      },
+      "startDate": "2026-05-01",
+      "endDate": "2026-09-30",
+      "enrollmentStartDate": "2026-04-01",
+      "enrollmentClosingDate": "2026-05-15",
+      "enrollmentDeadline": "2026-05-20",
+      "seatLimit": 30,
+      "minStudents": 8,
+      "enrolledSeats": 0,
+      "waitlistEnabled": true,
+      "mode": "Hybrid",
+      "batchType": "Hybrid",
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "createdAt": "2026-11-23T15:59:02.407Z",
+      "updatedAt": "2026-11-23T15:59:02.407Z"
+    },
     {
       "id": "bat-ssc-mpr-1",
       "courseId": "crs-frpb-ssc",
@@ -764,7 +2469,11 @@
       "seatLimit": 60,
       "enrolledSeats": 44,
       "mode": "Hybrid",
-      "status": "running"
+      "status": "running",
+      "lifecycleStatus": "active",
+      "batchType": "Hybrid",
+      "waitlistEnabled": true,
+      "minStudents": 10
     },
     {
       "id": "bat-ssc-online-1",
@@ -778,7 +2487,11 @@
       "seatLimit": 250,
       "enrolledSeats": 185,
       "mode": "Online Live",
-      "status": "open"
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "batchType": "Online",
+      "waitlistEnabled": true,
+      "minStudents": 10
     },
     {
       "id": "bat-hsc-utr-1",
@@ -792,7 +2505,11 @@
       "seatLimit": 50,
       "enrolledSeats": 38,
       "mode": "Offline Branch",
-      "status": "open"
+      "status": "open",
+      "lifecycleStatus": "enrollment_open",
+      "batchType": "Offline",
+      "waitlistEnabled": true,
+      "minStudents": 10
     },
     {
       "id": "bat-ielts-1",
@@ -806,7 +2523,11 @@
       "seatLimit": 40,
       "enrolledSeats": 31,
       "mode": "Online Live",
-      "status": "running"
+      "status": "running",
+      "lifecycleStatus": "active",
+      "batchType": "Online",
+      "waitlistEnabled": true,
+      "minStudents": 10
     }
   ],
   "lessons": [
@@ -824,7 +2545,10 @@
       "lectureSheetUrl": "https://alomsenglishcenter.com/sheets/ssc-right-form-verbs.pdf",
       "sheetSummary": "Covers subject-verb agreement, conditional triggers, modal passives, and past board question patterns from Dhaka & Rajshahi boards.",
       "isFreePreview": true,
-      "orderIndex": 1
+      "orderIndex": 1,
+      "status": "published",
+      "completionRequired": true,
+      "moduleId": "mod-crs-frpb-ssc-1"
     },
     {
       "id": "les-2",
@@ -843,7 +2567,10 @@
       "lectureSheetUrl": "https://alomsenglishcenter.com/sheets/completing-sentences-live.pdf",
       "sheetSummary": "Live interactive workshop covering It is high time, Lest, No sooner had, Provided that, and student Q&A.",
       "isFreePreview": false,
-      "orderIndex": 2
+      "orderIndex": 2,
+      "status": "published",
+      "completionRequired": true,
+      "moduleId": "mod-crs-frpb-ssc-1"
     },
     {
       "id": "les-3",
@@ -859,7 +2586,10 @@
       "lectureSheetUrl": "https://alomsenglishcenter.com/sheets/narration-master-sheet.pdf",
       "sheetSummary": "Complete rules for reporting verb shifts, universal truths, exclamation conversion, and 40 solved board passages.",
       "isFreePreview": false,
-      "orderIndex": 3
+      "orderIndex": 3,
+      "status": "published",
+      "completionRequired": true,
+      "moduleId": "mod-crs-frpb-ssc-2"
     },
     {
       "id": "les-4",
@@ -875,7 +2605,10 @@
       "lectureSheetUrl": "https://alomsenglishcenter.com/sheets/hsc-modifiers-guide.pdf",
       "sheetSummary": "Distinguishes participle, appositive, determiner, intensifier, and infinitive modifiers with 25 board examples.",
       "isFreePreview": true,
-      "orderIndex": 1
+      "orderIndex": 1,
+      "status": "published",
+      "completionRequired": true,
+      "moduleId": "mod-crs-hsc-combo-1"
     },
     {
       "id": "les-5",
@@ -893,7 +2626,10 @@
       "scheduledAt": "2026-11-25T19:30",
       "sheetSummary": "Gerund, infinitive, and noun phrase parallel structures for top marks in HSC 1st Paper Flow Charts.",
       "isFreePreview": false,
-      "orderIndex": 2
+      "orderIndex": 2,
+      "status": "published",
+      "completionRequired": true,
+      "moduleId": "mod-crs-hsc-combo-2"
     },
     {
       "id": "les-6",
@@ -909,7 +2645,10 @@
       "lectureSheetUrl": "https://alomsenglishcenter.com/sheets/ielts-task2-blueprint.pdf",
       "sheetSummary": "Thesis framing, PEEL paragraph development, cohesive devices without repetition, and lexical precision.",
       "isFreePreview": true,
-      "orderIndex": 1
+      "orderIndex": 1,
+      "status": "published",
+      "completionRequired": true,
+      "moduleId": "mod-crs-ielts-pro-1"
     }
   ],
   "exams": [
@@ -1392,6 +3131,150 @@
   ],
   "categories": [
     {
+      "id": "cat-1795450694923",
+      "name": "BCS Special 4107",
+      "slug": "bcs-special-4107",
+      "type": "course",
+      "description": "BCS Special 4107 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795450555841",
+      "name": "BCS Special 4936",
+      "slug": "bcs-special-4936",
+      "type": "course",
+      "description": "BCS Special 4936 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795450502683",
+      "name": "BCS Special 1732",
+      "slug": "bcs-special-1732",
+      "type": "course",
+      "description": "BCS Special 1732 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795450407534",
+      "name": "BCS Special 6691",
+      "slug": "bcs-special-6691",
+      "type": "course",
+      "description": "BCS Special 6691 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795450375620",
+      "name": "BCS Special 4629",
+      "slug": "bcs-special-4629",
+      "type": "course",
+      "description": "BCS Special 4629 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795450293936",
+      "name": "BCS Special 3111",
+      "slug": "bcs-special-3111",
+      "type": "course",
+      "description": "BCS Special 3111 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795450224363",
+      "name": "BCS Special 3500",
+      "slug": "bcs-special-3500",
+      "type": "course",
+      "description": "BCS Special 3500 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795450126766",
+      "name": "BCS Special 5813",
+      "slug": "bcs-special-5813",
+      "type": "course",
+      "description": "BCS Special 5813 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795449931798",
+      "name": "BCS Cat 0040",
+      "slug": "bcs-cat-0040",
+      "type": "course",
+      "description": "BCS Cat 0040 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795449750670",
+      "name": "BCS Cat 8462",
+      "slug": "bcs-cat-8462",
+      "type": "course",
+      "description": "BCS Cat 8462 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795449690526",
+      "name": "BCS Cat 8399",
+      "slug": "bcs-cat-8399",
+      "type": "course",
+      "description": "BCS Cat 8399 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795449606033",
+      "name": "BCS Cat 3642",
+      "slug": "bcs-cat-3642",
+      "type": "course",
+      "description": "BCS Cat 3642 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795449516668",
+      "name": "BCS Cat 4332",
+      "slug": "bcs-cat-4332",
+      "type": "course",
+      "description": "BCS Cat 4332 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795449452908",
+      "name": "BCS Cat 0677",
+      "slug": "bcs-cat-0677",
+      "type": "course",
+      "description": "BCS Cat 0677 programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795449390789",
+      "name": "BCS Special Live",
+      "slug": "bcs-special-live",
+      "type": "course",
+      "description": "BCS Special Live programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
+      "id": "cat-1795449355998",
+      "name": "BCS Special Test",
+      "slug": "bcs-special-test",
+      "type": "course",
+      "description": "BCS Special Test programs and resources.",
+      "image": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+      "active": true
+    },
+    {
       "id": "cat-hsc",
       "name": "HSC English",
       "slug": "hsc-english",
@@ -1537,6 +3420,19 @@
     }
   },
   "attendance": [
+    {
+      "id": "att-1795450698537-aoim",
+      "targetType": "student",
+      "targetId": "u-student",
+      "targetName": "Arafat Rahman",
+      "branchId": "br-mirpur",
+      "batchId": "bat-1795450696642",
+      "date": "2026-11-23",
+      "status": "present",
+      "checkInTime": "04:18 PM",
+      "notes": "",
+      "recordedBy": "Alomgir Hossain"
+    },
     {
       "id": "att-1",
       "targetType": "student",
@@ -1731,6 +3627,23 @@
   ],
   "transactions": [
     {
+      "id": "txn-1795450698337-9m3",
+      "invoiceNo": "INV-698337-85",
+      "referenceType": "course",
+      "referenceId": "enr-1795450698337-657",
+      "userId": "u-student",
+      "payerName": "Arafat Rahman",
+      "gateway": "Branch Cash",
+      "walletOrLast4": "0004",
+      "trxId": "ADM-98337",
+      "subtotal": 1990,
+      "discountAmount": 0,
+      "deliveryFee": 0,
+      "totalAmount": 1990,
+      "status": "completed",
+      "createdAt": "2026-11-23T16:18:18.337Z"
+    },
+    {
       "id": "txn-1795441950840",
       "invoiceNo": "INV-AEC-366315",
       "referenceType": "course",
@@ -1766,6 +3679,40 @@
     }
   ],
   "enrollments": [
+    {
+      "id": "enr-1795450698337-657",
+      "userId": "u-student",
+      "studentName": "Arafat Rahman",
+      "studentEmail": "student@alomsenglish.com",
+      "courseId": "crs-1795450695121",
+      "courseTitle": "BCS English Master 4107",
+      "branchId": "br-mirpur",
+      "batchId": "bat-1795450697804",
+      "batchName": "BCS Beta 4107",
+      "paymentMethod": "Branch Cash",
+      "invoiceNo": "INV-698337-85",
+      "trxId": "ADM-98337",
+      "amountPaid": 1990,
+      "status": "approved",
+      "completedLessonIds": [],
+      "history": [
+        {
+          "id": "eh-1795450698820",
+          "action": "transferred",
+          "actorName": "Alomgir Hossain",
+          "note": "Transferred from \"BCS Alpha 4107\" to \"BCS Beta 4107\". Reason: Preferred schedule / branch shift. Preserved 1 attendance & 1 payment record(s).",
+          "createdAt": "2026-11-23T16:18:18.820Z"
+        },
+        {
+          "id": "eh-1795450698337",
+          "action": "enrolled_in_batch",
+          "actorName": "Alomgir Hossain",
+          "note": "Enrolled directly into batch \"BCS Alpha 4107\" (ALP-4107)",
+          "createdAt": "2026-11-23T16:18:18.337Z"
+        }
+      ],
+      "enrolledAt": "2026-11-23T16:18:18.337Z"
+    },
     {
       "id": "enr-1",
       "userId": "u-student",
@@ -1959,6 +3906,103 @@
   "backups": [],
   "recycleBin": [
     {
+      "id": "bin-1795449755300",
+      "entityType": "batch",
+      "originalId": "bat-1795449752066",
+      "label": "BCS Alpha 8462 (BCS-A8462)",
+      "deletedBy": "Alomgir Hossain",
+      "deletedAt": "2026-11-23T16:02:35.300Z",
+      "snapshot": {
+        "id": "bat-1795449752066",
+        "courseId": "crs-1795440023167",
+        "name": "BCS Alpha 8462",
+        "code": "BCS-A8462",
+        "description": "",
+        "thumbnail": "/src/assets/images/hero_hsc_english_1795411661478.jpg",
+        "branchId": "br-mirpur",
+        "instructorId": "inst-2",
+        "assistantInstructorId": null,
+        "teacherAssignments": [
+          {
+            "instructorId": "inst-2",
+            "role": "main",
+            "responsibility": "Lead Instruction & Syllabus Delivery",
+            "assignedAt": "2026-11-23T16:02:32.062Z"
+          }
+        ],
+        "teacherAssignmentHistory": [
+          {
+            "id": "bth-1795449752066",
+            "instructorId": "inst-2",
+            "instructorName": "Mahmudul Hasan",
+            "role": "main",
+            "action": "assigned",
+            "note": "Initial batch creation assignment",
+            "actorName": "Alomgir Hossain",
+            "at": "2026-11-23T16:02:32.066Z"
+          }
+        ],
+        "schedule": "Wed — 09:00–10:30",
+        "schedules": [
+          {
+            "id": "slot-1795449751292-1",
+            "title": "Lecture Session 1",
+            "dayOfWeek": "Wed",
+            "startTime": "09:00",
+            "endTime": "10:30",
+            "durationMinutes": 90,
+            "breakMinutes": 10,
+            "instructorId": "inst-1",
+            "roomLabel": "Room 309",
+            "status": "scheduled"
+          }
+        ],
+        "classDurationMinutes": 90,
+        "breakMinutes": 10,
+        "weeklyFrequency": 3,
+        "totalClasses": 36,
+        "classroomOrMeeting": "Room 309",
+        "classroom": {
+          "classroomName": "Academic Hall A",
+          "building": "Main Campus",
+          "floor": "2nd Floor",
+          "roomNumber": "Room 309"
+        },
+        "onlineSettings": {
+          "platform": "Zoom",
+          "meetingLink": "",
+          "meetingId": "",
+          "meetingPassword": "",
+          "instructions": "Join 5 minutes prior to class start with your registered full name."
+        },
+        "feeSettings": {
+          "admissionFee": 500,
+          "monthlyFee": 1500,
+          "courseFeeOverride": null,
+          "installmentEnabled": true,
+          "installmentOptions": "2 Monthly Installments (50% + 50%)",
+          "paymentDeadline": "2026-05-15",
+          "latePaymentPolicy": "5-day grace period; ৳100 reminder fee applies after due date.",
+          "batchDiscountPercent": 0
+        },
+        "startDate": "2026-05-01",
+        "endDate": "2026-09-30",
+        "enrollmentStartDate": "2026-04-01",
+        "enrollmentClosingDate": "2026-05-15",
+        "enrollmentDeadline": "2026-05-20",
+        "seatLimit": 30,
+        "minStudents": 8,
+        "enrolledSeats": 0,
+        "waitlistEnabled": true,
+        "mode": "Hybrid",
+        "batchType": "Hybrid",
+        "status": "open",
+        "lifecycleStatus": "enrollment_open",
+        "createdAt": "2026-11-23T16:02:32.066Z",
+        "updatedAt": "2026-11-23T16:02:32.066Z"
+      }
+    },
+    {
       "id": "bin-1795441962538",
       "entityType": "enrollment",
       "originalId": "enr-1795441950840",
@@ -1984,6 +4028,570 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "audit-1795450816163-b8fa",
+      "actorId": "u-student",
+      "actorName": "Arafat Rahman",
+      "actorRole": "student",
+      "action": "USER_LOGIN",
+      "target": "st*****@alomsenglish.com",
+      "details": "Signed in to student workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:20:16.163Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450795693-d6e8",
+      "actorId": "u-teacher",
+      "actorName": "Mahmudul Hasan",
+      "actorRole": "teacher",
+      "action": "USER_LOGIN",
+      "target": "te*****@alomsenglish.com",
+      "details": "Signed in to teacher workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:19:55.693Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450767700-e693",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:19:27.701Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450698820-fd05",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_STUDENT_TRANSFER",
+      "target": "Arafat Rahman",
+      "details": "Transferred from \"BCS Alpha 4107\" to \"BCS Beta 4107\". Reason: Preferred schedule / branch shift. Preserved 1 attendance & 1 payment record(s).",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:18:18.820Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450698337-ac34",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_ENROLL",
+      "target": "BCS Alpha 4107",
+      "details": "Enrolled 1 student(s) (0 skipped)",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:18:18.337Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450697804-7493",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Beta 4107",
+      "details": "BET-4107 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:18:17.804Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450696642-96ef",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Alpha 4107",
+      "details": "ALP-4107 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:18:16.642Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450695121-39a6",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "COURSE_CREATE",
+      "target": "BCS English Master 4107",
+      "details": "BCS Special 4107 · ৳1990 (published)",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:18:15.121Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450692633-4c23",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:18:12.633Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450558765-b1e5",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Beta 4936",
+      "details": "BET-4936 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:15:58.765Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450557645-ef80",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Alpha 4936",
+      "details": "ALP-4936 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:15:57.645Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450556062-5f2c",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "COURSE_CREATE",
+      "target": "BCS English Master 4936",
+      "details": "BCS Special 4936 · ৳1990 (published)",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:15:56.062Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450553707-b260",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:15:53.707Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450505717-c962",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Beta 1732",
+      "details": "BET-1732 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:15:05.717Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450504497-4792",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Alpha 1732",
+      "details": "ALP-1732 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:15:04.497Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450502892-87b8",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "COURSE_CREATE",
+      "target": "BCS English Master 1732",
+      "details": "BCS Special 1732 · ৳1990 (published)",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:15:02.892Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450500416-2d6a",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:15:00.416Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450410586-37f6",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Beta 6691",
+      "details": "BET-6691 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:13:30.586Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450409435-6c4d",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Alpha 6691",
+      "details": "ALP-6691 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:13:29.435Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450407750-3037",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "COURSE_CREATE",
+      "target": "BCS English Master 6691",
+      "details": "BCS Special 6691 · ৳1990 (published)",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:13:27.750Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450405341-b977",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:13:25.341Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450375818-637b",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "COURSE_CREATE",
+      "target": "BCS English Master 4629",
+      "details": "BCS Special 4629 · ৳1990 (published)",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:12:55.818Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450373415-d7c3",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:12:53.415Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450294158-04f0",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "COURSE_CREATE",
+      "target": "BCS English Master 3111",
+      "details": "BCS Special 3111 · ৳1990 (published)",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:11:34.158Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450291787-4a16",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:11:31.787Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450224566-c80b",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "COURSE_CREATE",
+      "target": "BCS English Master 3500",
+      "details": "BCS Special 3500 · ৳1990 (published)",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:10:24.566Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795450222135-cc0c",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:10:22.135Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795450124540-d731",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:08:44.540Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449930128-93c9",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:05:30.128Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449880888-2d45",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:04:40.888Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449755300-acb7",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_DELETE",
+      "target": "BCS Alpha 8462",
+      "details": "Moved empty batch to Recycle Bin",
+      "severity": "warning",
+      "createdAt": "2026-11-23T16:02:35.300Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795449753244-512e",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Beta 8462",
+      "details": "BCS-B8462 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:02:33.244Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795449752066-8ed9",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Alpha 8462",
+      "details": "BCS-A8462 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:02:32.066Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795449748542-a895",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:02:28.542Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449693045-0601",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Beta 8399",
+      "details": "BCS-B8399 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:01:33.045Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795449691878-1744",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Alpha 8399",
+      "details": "BCS-A8399 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:01:31.879Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795449688477-744a",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:01:28.477Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449603731-537b",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T16:00:03.732Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449545816-144e",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Beta 4332",
+      "details": "BCS-B4332 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:59:05.816Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795449542407-23a1",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATE",
+      "target": "BCS Alpha 4332",
+      "details": "BCS-A4332 · Hybrid",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:59:02.407Z",
+      "category": "course"
+    },
+    {
+      "id": "audit-1795449514430-9758",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:58:34.430Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449450774-85f7",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:57:30.774Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449388639-5c7c",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:56:28.639Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449353909-f436",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:55:53.909Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449283527-387b",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:54:43.527Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449239231-83d3",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:53:59.231Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795449211514-bda9",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-23T15:53:31.515Z",
+      "category": "login"
+    },
     {
       "id": "audit-1795444658731-fb15",
       "actorId": "u-admin",
@@ -2561,6 +5169,350 @@
       "active": false,
       "lastStatus": "Paused",
       "secretMasked": "whsec_••••••••44b8"
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod-crs-frpb-ssc-1",
+      "courseId": "crs-frpb-ssc",
+      "title": "Module 1: Core Grammar",
+      "orderIndex": 1,
+      "status": "published"
+    },
+    {
+      "id": "mod-crs-frpb-ssc-2",
+      "courseId": "crs-frpb-ssc",
+      "title": "Module 2: Transformation",
+      "orderIndex": 2,
+      "status": "published"
+    },
+    {
+      "id": "mod-crs-hsc-combo-1",
+      "courseId": "crs-hsc-combo",
+      "title": "HSC 2nd Paper Grammar",
+      "orderIndex": 1,
+      "status": "published"
+    },
+    {
+      "id": "mod-crs-hsc-combo-2",
+      "courseId": "crs-hsc-combo",
+      "title": "HSC 1st Paper Writing",
+      "orderIndex": 2,
+      "status": "published"
+    },
+    {
+      "id": "mod-crs-ielts-pro-1",
+      "courseId": "crs-ielts-pro",
+      "title": "Writing Module",
+      "orderIndex": 1,
+      "status": "published"
+    }
+  ],
+  "chapters": [
+    {
+      "id": "chp-ssc-1",
+      "courseId": "crs-frpb-ssc",
+      "moduleId": "mod-ssc-1",
+      "title": "Board Grammar Essentials",
+      "orderIndex": 1
+    },
+    {
+      "id": "chp-ssc-2",
+      "courseId": "crs-frpb-ssc",
+      "moduleId": "mod-ssc-2",
+      "title": "Narration & Sentence Synthesis",
+      "orderIndex": 1
+    },
+    {
+      "id": "chp-hsc-1",
+      "courseId": "crs-hsc-combo",
+      "moduleId": "mod-hsc-1",
+      "title": "Modifiers & Connectors",
+      "orderIndex": 1
+    }
+  ],
+  "assignments": [
+    {
+      "id": "asg-ssc-1",
+      "courseId": "crs-frpb-ssc",
+      "batchId": "bat-ssc-mpr-1",
+      "title": "Board Completing Sentences & Narration Drill Sheet 01",
+      "instructions": "Write 10 complete sentences using \"It is high time\", \"Lest\", \"Provided that\", and convert the passage narration exercise into indirect speech.",
+      "dueDate": "2026-12-05",
+      "maxMarks": 20,
+      "createdByUserId": "u-teacher",
+      "createdByName": "Mahmudul Hasan",
+      "createdAt": "2026-03-01T10:00:00.000Z"
+    }
+  ],
+  "assignmentSubmissions": [],
+  "announcements": [
+    {
+      "id": "ann-ssc-1",
+      "courseId": "crs-frpb-ssc",
+      "title": "Weekly Model Test Schedule & Lecture Sheet Update",
+      "message": "Download the updated Right Form of Verbs PDF sheet before Friday 8:00 PM Live Doubt Solving session.",
+      "pinned": true,
+      "postedByUserId": "u-teacher",
+      "postedByName": "Mahmudul Hasan",
+      "createdAt": "2026-03-02T09:00:00.000Z"
+    }
+  ],
+  "certificates": [],
+  "batchWaitlists": [],
+  "batchTransfers": [
+    {
+      "id": "btr-1795450698820",
+      "enrollmentId": "enr-1795450698337-657",
+      "studentUserId": "u-student",
+      "studentName": "Arafat Rahman",
+      "fromBatchId": "bat-1795450696642",
+      "fromBatchName": "BCS Alpha 4107",
+      "toBatchId": "bat-1795450697804",
+      "toBatchName": "BCS Beta 4107",
+      "fromCourseId": "crs-1795450695121",
+      "toCourseId": "crs-1795450695121",
+      "reason": "Preferred schedule / branch shift",
+      "preservedAttendanceCount": 1,
+      "preservedPaymentCount": 1,
+      "actorName": "Alomgir Hossain",
+      "transferredAt": "2026-11-23T16:18:18.820Z"
+    }
+  ],
+  "batchNotifications": [
+    {
+      "id": "bnot-1795450698820-cw02",
+      "batchId": "bat-1795450697804",
+      "courseId": "crs-1795450695121",
+      "type": "enrollment",
+      "title": "Batch Transfer Confirmed: BCS Beta 4107",
+      "message": "You have been transferred to BCS Beta 4107 (Fri — 18:00–19:15). Your previous attendance and payment history remain intact.",
+      "recipientUserIds": [
+        "u-student"
+      ],
+      "channel": "in_app",
+      "readByUserIds": [],
+      "createdBy": "Alomgir Hossain",
+      "createdAt": "2026-11-23T16:18:18.820Z"
+    },
+    {
+      "id": "bnot-1795450698337-vhfb",
+      "batchId": "bat-1795450696642",
+      "courseId": "crs-1795450695121",
+      "type": "enrollment",
+      "title": "Welcome to BCS Alpha 4107",
+      "message": "You have been enrolled in BCS Alpha 4107 (Thu — 18:00–19:15).",
+      "recipientUserIds": [
+        "u-student"
+      ],
+      "channel": "in_app",
+      "readByUserIds": [],
+      "createdBy": "Alomgir Hossain",
+      "createdAt": "2026-11-23T16:18:18.337Z"
+    },
+    {
+      "id": "bnot-seed-1",
+      "batchId": "bat-ssc-mpr-1",
+      "courseId": "crs-frpb-ssc",
+      "type": "batch_start",
+      "title": "SSC-27 Mirpur Evening Batch A — Class Routine Published",
+      "message": "Sun · Tue · Thu at 4:30 PM (Mirpur DOHS Room 201 + Online Hybrid). Please bring Grammar Practice Sheet 01.",
+      "channel": "in_app",
+      "readByUserIds": [],
+      "createdBy": "Alomgir Hossain",
+      "createdAt": "2026-04-04T09:00:00.000Z"
+    }
+  ],
+  "batchActivityLogs": [
+    {
+      "id": "blog-1795450698820-hsx8",
+      "batchId": "bat-1795450697804",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "STUDENT_TRANSFERRED_IN",
+      "details": "Transferred from \"BCS Alpha 4107\" to \"BCS Beta 4107\". Reason: Preferred schedule / branch shift. Preserved 1 attendance & 1 payment record(s).",
+      "createdAt": "2026-11-23T16:18:18.820Z"
+    },
+    {
+      "id": "blog-1795450698820-eeu5",
+      "batchId": "bat-1795450696642",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "STUDENT_TRANSFERRED_OUT",
+      "details": "Transferred from \"BCS Alpha 4107\" to \"BCS Beta 4107\". Reason: Preferred schedule / branch shift. Preserved 1 attendance & 1 payment record(s).",
+      "createdAt": "2026-11-23T16:18:18.820Z"
+    },
+    {
+      "id": "blog-1795450698555-qcm1",
+      "batchId": "bat-1795450696642",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "ATTENDANCE_RECORDED",
+      "details": "Marked attendance on 2026-11-23 for 1 student(s).",
+      "createdAt": "2026-11-23T16:18:18.555Z"
+    },
+    {
+      "id": "blog-1795450698337-qzls",
+      "batchId": "bat-1795450696642",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_STUDENT_ENROLLED",
+      "details": "Enrolled 1 student(s): Arafat Rahman",
+      "createdAt": "2026-11-23T16:18:18.337Z"
+    },
+    {
+      "id": "blog-1795450697804-ux4k",
+      "batchId": "bat-1795450697804",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Beta 4107\" (BET-4107) for BCS English Master 4107",
+      "createdAt": "2026-11-23T16:18:17.804Z"
+    },
+    {
+      "id": "blog-1795450696642-m47o",
+      "batchId": "bat-1795450696642",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Alpha 4107\" (ALP-4107) for BCS English Master 4107",
+      "createdAt": "2026-11-23T16:18:16.642Z"
+    },
+    {
+      "id": "blog-1795450558765-6zaz",
+      "batchId": "bat-1795450558765",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Beta 4936\" (BET-4936) for BCS English Master 4936",
+      "createdAt": "2026-11-23T16:15:58.765Z"
+    },
+    {
+      "id": "blog-1795450557645-8x57",
+      "batchId": "bat-1795450557645",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Alpha 4936\" (ALP-4936) for BCS English Master 4936",
+      "createdAt": "2026-11-23T16:15:57.645Z"
+    },
+    {
+      "id": "blog-1795450505717-g09d",
+      "batchId": "bat-1795450505717",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Beta 1732\" (BET-1732) for BCS English Master 1732",
+      "createdAt": "2026-11-23T16:15:05.717Z"
+    },
+    {
+      "id": "blog-1795450504497-gkpv",
+      "batchId": "bat-1795450504497",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Alpha 1732\" (ALP-1732) for BCS English Master 1732",
+      "createdAt": "2026-11-23T16:15:04.497Z"
+    },
+    {
+      "id": "blog-1795450410585-n2lc",
+      "batchId": "bat-1795450410585",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Beta 6691\" (BET-6691) for BCS English Master 6691",
+      "createdAt": "2026-11-23T16:13:30.586Z"
+    },
+    {
+      "id": "blog-1795450409435-pvby",
+      "batchId": "bat-1795450409434",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Alpha 6691\" (ALP-6691) for BCS English Master 6691",
+      "createdAt": "2026-11-23T16:13:29.435Z"
+    },
+    {
+      "id": "blog-1795449753244-g8qb",
+      "batchId": "bat-1795449753244",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Beta 8462\" (BCS-B8462) for How to Score 95+ in HSC English 2nd Paper Modifier & Connector Questions",
+      "createdAt": "2026-11-23T16:02:33.244Z"
+    },
+    {
+      "id": "blog-1795449752066-cd8f",
+      "batchId": "bat-1795449752066",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Alpha 8462\" (BCS-A8462) for How to Score 95+ in HSC English 2nd Paper Modifier & Connector Questions",
+      "createdAt": "2026-11-23T16:02:32.066Z"
+    },
+    {
+      "id": "blog-1795449693045-aklw",
+      "batchId": "bat-1795449693045",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Beta 8399\" (BCS-B8399) for How to Score 95+ in HSC English 2nd Paper Modifier & Connector Questions",
+      "createdAt": "2026-11-23T16:01:33.045Z"
+    },
+    {
+      "id": "blog-1795449691878-2jby",
+      "batchId": "bat-1795449691878",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Alpha 8399\" (BCS-A8399) for How to Score 95+ in HSC English 2nd Paper Modifier & Connector Questions",
+      "createdAt": "2026-11-23T16:01:31.878Z"
+    },
+    {
+      "id": "blog-1795449545816-0k6y",
+      "batchId": "bat-1795449545816",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Beta 4332\" (BCS-B4332) for How to Score 95+ in HSC English 2nd Paper Modifier & Connector Questions",
+      "createdAt": "2026-11-23T15:59:05.816Z"
+    },
+    {
+      "id": "blog-1795449542407-rakp",
+      "batchId": "bat-1795449542407",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_CREATED",
+      "details": "Created \"BCS Alpha 4332\" (BCS-A4332) for How to Score 95+ in HSC English 2nd Paper Modifier & Connector Questions",
+      "createdAt": "2026-11-23T15:59:02.407Z"
+    },
+    {
+      "id": "blog-seed-1",
+      "batchId": "bat-ssc-mpr-1",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "BATCH_INITIALIZED",
+      "details": "Hybrid schedule & classroom Room 201 configured for SSC-27 Mirpur Evening Batch A.",
+      "createdAt": "2026-04-01T10:00:00.000Z"
     }
   ]
 }

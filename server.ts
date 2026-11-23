@@ -29,9 +29,14 @@ import {
   resolveTeacherInstructorIds,
   validateEnrollmentRequest,
 } from './src/lib/courseEnterprise';
+import {
+  getTeacherAssignedBatches,
+  redactBatchForViewer,
+} from './src/lib/batchEnterprise';
 import { recalculateExamAttemptGrade, validateProfileUpdate } from './src/lib/usersAndTeaching';
 import { maskEmailForAudit } from './src/lib/auditLogs';
 import { createAiRouter } from './src/server/aiRoutes';
+import { createBatchEnterpriseRouter } from './src/server/batchEnterpriseRoutes';
 import { createCourseEnterpriseRouter } from './src/server/courseEnterpriseRoutes';
 import { createPlatformRouter } from './src/server/platformRoutes';
 import {
@@ -246,7 +251,7 @@ async function startServer() {
         ({ apiKeyMasked: _k, webhookSecretMasked: _w, ...pub }) => pub
       ),
       courses: publicCourses,
-      batches: db.batches,
+      batches: db.batches.map((b) => redactBatchForViewer(b, null, [], db.instructors)),
       modules: db.modules.filter((m) => (m.status ?? 'published') !== 'draft'),
       instructors: db.instructors,
       products: db.products,
@@ -266,7 +271,9 @@ async function startServer() {
       return;
     }
     const instructors = db.instructors.filter((i) => course.instructorIds.includes(i.id));
-    const batches = db.batches.filter((b) => b.courseId === course.id);
+    const batches = db.batches
+      .filter((b) => b.courseId === course.id)
+      .map((b) => redactBatchForViewer(b, null, [], db.instructors));
     const modules = db.modules
       .filter((m) => m.courseId === course.id && (m.status ?? 'published') !== 'draft')
       .sort((a, b) => a.orderIndex - b.orderIndex);
@@ -987,6 +994,10 @@ async function startServer() {
         },
         courses: db.courses,
         batches: db.batches,
+        batchWaitlists: db.batchWaitlists,
+        batchTransfers: db.batchTransfers,
+        batchNotifications: db.batchNotifications,
+        batchActivityLogs: db.batchActivityLogs,
         modules: db.modules,
         chapters: db.chapters,
         lessons: db.lessons,
@@ -1061,7 +1072,8 @@ async function startServer() {
     if (user.role === 'teacher') {
       const assignedIds = getTeacherAssignedCourseIds(user, db.courses, db.instructors, db.batches);
       const assignedCourses = db.courses.filter((c) => assignedIds.has(c.id));
-      const assignedBatches = db.batches.filter((b) => assignedIds.has(b.courseId));
+      const assignedBatches = getTeacherAssignedBatches(user, db.batches, db.instructors);
+      const assignedBatchIdSet = new Set(assignedBatches.map((b) => b.id));
       const assignedModules = db.modules.filter((m) => assignedIds.has(m.courseId));
       const assignedChapters = db.chapters.filter((ch) => assignedIds.has(ch.courseId));
       const assignedLessons = db.lessons.filter((l) => assignedIds.has(l.courseId));
@@ -1084,6 +1096,12 @@ async function startServer() {
         },
         courses: assignedCourses,
         batches: assignedBatches,
+        batchWaitlists: db.batchWaitlists.filter((w) => assignedBatchIdSet.has(w.batchId)),
+        batchTransfers: db.batchTransfers.filter(
+          (t) => (t.fromBatchId && assignedBatchIdSet.has(t.fromBatchId)) || assignedBatchIdSet.has(t.toBatchId)
+        ),
+        batchNotifications: db.batchNotifications.filter((n) => assignedBatchIdSet.has(n.batchId)),
+        batchActivityLogs: db.batchActivityLogs.filter((l) => assignedBatchIdSet.has(l.batchId)),
         modules: assignedModules,
         chapters: assignedChapters,
         lessons: assignedLessons,
@@ -1162,7 +1180,11 @@ async function startServer() {
       examAttempts: myAttempts,
       orders: myOrders,
       courses: db.courses,
-      batches: db.batches,
+      batches: db.batches.map((b) => redactBatchForViewer(b, user, myEnrollments, db.instructors)),
+      batchNotifications: db.batchNotifications.filter((n) =>
+        myEnrollments.some((e) => e.batchId === n.batchId && e.status === 'approved')
+      ),
+      attendance: db.attendance.filter((a) => a.targetId === user.id),
       modules: db.modules.filter((m) => (m.status ?? 'published') !== 'draft'),
       lessons: db.lessons.filter((l) => (l.status ?? 'published') !== 'draft'),
       assignments: db.assignments.filter((a) => myApprovedCourseIds.has(a.courseId)),
@@ -1188,15 +1210,6 @@ async function startServer() {
     'archived',
   ];
 
-  const ALLOWED_COURSE_CATEGORIES: Course['category'][] = [
-    'HSC English',
-    'SSC English',
-    'IELTS & Spoken',
-    'Grammar Pro',
-    'Admission',
-    'Combo Packs',
-  ];
-
   function parseCoursePayload(
     body: Record<string, unknown>,
     db: ReturnType<typeof getDb>,
@@ -1204,12 +1217,8 @@ async function startServer() {
   ) {
     const title = String(body?.title ?? existing?.title ?? '').trim().slice(0, 180);
     const subtitle = String(body?.subtitle ?? existing?.subtitle ?? '').trim().slice(0, 260);
-    const rawCat = String(body?.category ?? existing?.category ?? 'HSC English').trim();
-    const category: Course['category'] = ALLOWED_COURSE_CATEGORIES.includes(
-      rawCat as Course['category']
-    )
-      ? (rawCat as Course['category'])
-      : 'HSC English';
+    const rawCat = String(body?.category ?? existing?.category ?? 'HSC English').trim().slice(0, 80);
+    const category: string = rawCat || 'HSC English';
     const levelTag = String(body?.levelTag ?? existing?.levelTag ?? 'HSC 27').trim().slice(0, 40) || 'HSC 27';
     const rawLevel = String(body?.level ?? existing?.level ?? 'Intermediate');
     const level: CourseLevel =
@@ -3524,6 +3533,7 @@ async function startServer() {
 
   // Mount AI Agents, Enterprise Course Management & Full-Platform Operations Routers
   app.use('/api/ai', createAiRouter(getBearerUser));
+  app.use(createBatchEnterpriseRouter(requireAuth, requireRole));
   app.use(createCourseEnterpriseRouter(requireAuth, requireRole));
   app.use(createPlatformRouter(requireAuth, requireRole));
 

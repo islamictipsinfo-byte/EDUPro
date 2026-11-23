@@ -12,8 +12,9 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { resolveCourseCategories } from '../../lib/batchEnterprise';
 import { calculateCoursePricingServerSide, generateCourseSlug } from '../../lib/courseEnterprise';
 import type {
   Branch,
@@ -62,15 +63,6 @@ const THUMBNAIL_PRESETS = [
   { label: 'Course Books', url: '/src/assets/images/course_english_books_1795411661325.jpg' },
 ];
 
-const CATEGORIES: Course['category'][] = [
-  'HSC English',
-  'SSC English',
-  'IELTS & Spoken',
-  'Grammar Pro',
-  'Admission',
-  'Combo Packs',
-];
-
 const STEPS = [
   { id: 1, title: 'Basic Info', icon: BookOpen },
   { id: 2, title: 'Configuration', icon: CalendarClock },
@@ -91,12 +83,17 @@ export function CourseWizardModal({
   onClose,
   onSaved,
 }: CourseWizardModalProps) {
-  const { apiFetch } = useAuth();
+  const { user, bootstrap, apiFetch, refreshBootstrap } = useAuth();
   const isEditing = Boolean(course);
+  const dynamicCategories = resolveCourseCategories(bootstrap?.categories ?? [], allCourses);
 
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quickCatOpen, setQuickCatOpen] = useState(false);
+  const [quickCatName, setQuickCatName] = useState('');
+  const [quickCatBusy, setQuickCatBusy] = useState(false);
+  const lastInitKeyRef = useRef<string | null>(null);
 
   // Step 1: Basic Info
   const [title, setTitle] = useState('');
@@ -170,9 +167,17 @@ export function CourseWizardModal({
   const [noIndex, setNoIndex] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      lastInitKeyRef.current = null;
+      return;
+    }
+    const initKey = `${course?.id ?? 'new'}::${templateDefaults?.title ?? ''}`;
+    if (lastInitKeyRef.current === initKey) return;
+    lastInitKeyRef.current = initKey;
     setStep(1);
     setError(null);
+    setQuickCatOpen(false);
+    setQuickCatName('');
     setNewBatches([]);
 
     const src = course ?? templateDefaults ?? null;
@@ -611,21 +616,76 @@ export function CourseWizardModal({
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
                 <div>
-                  <label htmlFor="cw-cat" className="mb-1 block text-xs font-bold text-slate-700">
-                    Category
-                  </label>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label htmlFor="cw-cat" className="block text-xs font-bold text-slate-700">
+                      Category
+                    </label>
+                    {user?.role === 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setQuickCatOpen((v) => !v)}
+                        className="text-[11px] font-bold text-indigo-600 hover:underline"
+                      >
+                        {quickCatOpen ? 'Close' : '+ New Category'}
+                      </button>
+                    )}
+                  </div>
                   <select
                     id="cw-cat"
                     value={category}
-                    onChange={(e) => setCategory(e.target.value as Course['category'])}
+                    onChange={(e) => setCategory(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
                   >
-                    {CATEGORIES.map((c) => (
+                    {dynamicCategories.map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>
                     ))}
                   </select>
+                  {quickCatOpen && user?.role === 'admin' && (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={quickCatName}
+                        onChange={(e) => setQuickCatName(e.target.value)}
+                        placeholder="New category name..."
+                        aria-label="New course category name"
+                        className="min-w-0 flex-1 rounded-lg border border-indigo-300 px-2.5 py-1.5 text-xs"
+                      />
+                      <button
+                        type="button"
+                        disabled={quickCatBusy || !quickCatName.trim()}
+                        onClick={async () => {
+                          if (!quickCatName.trim()) return;
+                          setQuickCatBusy(true);
+                          try {
+                            const res = await apiFetch<{ category: { name: string } }>(
+                              '/api/portal/categories',
+                              {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                  name: quickCatName.trim(),
+                                  type: 'course',
+                                  active: true,
+                                }),
+                              }
+                            );
+                            await refreshBootstrap();
+                            setCategory(res.category.name);
+                            setQuickCatName('');
+                            setQuickCatOpen(false);
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : 'Failed to create category.');
+                          } finally {
+                            setQuickCatBusy(false);
+                          }
+                        }}
+                        className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {quickCatBusy ? '...' : 'Add'}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label htmlFor="cw-level" className="mb-1 block text-xs font-bold text-slate-700">

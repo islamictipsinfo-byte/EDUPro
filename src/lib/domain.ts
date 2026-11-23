@@ -55,6 +55,7 @@ const ROLE_PORTAL_MATRIX: Record<UserRole, PortalSection[]> = {
   ],
   branch_manager: [
     'overview',
+    'courses',
     'payments',
     'attendance_finance',
     'enrollments',

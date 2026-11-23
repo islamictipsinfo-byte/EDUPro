@@ -7,7 +7,6 @@ import {
   BookOpen,
   Bot,
   Building2,
-  CalendarClock,
   CheckCircle2,
   ClipboardList,
   Copy,
@@ -43,8 +42,11 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { AdminBatchModal } from '../components/AdminBatchModal';
 import { AdminLessonModal } from '../components/AdminLessonModal';
+import { BatchDetailWorkspace } from '../components/batches/BatchDetailWorkspace';
+import { BatchEnterpriseDashboard } from '../components/batches/BatchEnterpriseDashboard';
+import { BatchWizardModal } from '../components/batches/BatchWizardModal';
+import { StudentBatchPortal } from '../components/batches/StudentBatchPortal';
 import { CertificateModal } from '../components/courses/CertificateModal';
 import { CourseEnterpriseDashboard } from '../components/courses/CourseEnterpriseDashboard';
 import { CourseWizardModal } from '../components/courses/CourseWizardModal';
@@ -80,7 +82,6 @@ import { useAuth } from '../context/AuthContext';
 import { isCourseStatusLive } from '../lib/courseEnterprise';
 import {
   calculateStudentProgress,
-  computeBatchSeatUsage,
   DEFAULT_DASHBOARD_CONFIG,
   filterLessonsByTypeAndBatch,
   getAllowedPortalSections,
@@ -274,9 +275,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
   // Batch Studio state
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [editingBatch, setEditingBatch] = useState<CourseBatch | null>(null);
-  const [batchCourseFilter, setBatchCourseFilter] = useState<string>('all');
-  const [batchSearch, setBatchSearch] = useState('');
-  const [confirmBatchDeleteId, setConfirmBatchDeleteId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
 
   // Teacher / Admin: Lecture, Live Class & Recorded Video Studio state
   const [lessonModalOpen, setLessonModalOpen] = useState(false);
@@ -539,26 +538,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
     );
   };
 
-  const handleBatchStatusChange = async (batch: CourseBatch, status: CourseBatch['status']) => {
-    await apiFetch(`/api/portal/batches/${batch.id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    });
-    await Promise.all([loadPortal(), refreshBootstrap()]);
-    notify(`Batch "${batch.name}" marked as ${status}.`);
-  };
-
-  const handleDeleteBatch = async (id: string) => {
-    if (confirmBatchDeleteId !== id) {
-      setConfirmBatchDeleteId(id);
-      return;
-    }
-    await apiFetch(`/api/portal/batches/${id}`, { method: 'DELETE' });
-    setConfirmBatchDeleteId(null);
-    await Promise.all([loadPortal(), refreshBootstrap()]);
-    notify('Course batch deleted.');
-  };
-
   const handleToggleLiveStatus = async (lesson: CourseLesson, liveStatus: LiveClassStatus) => {
     await apiFetch(`/api/portal/lessons/${lesson.id}/live-status`, {
       method: 'PATCH',
@@ -768,8 +747,13 @@ export function PortalPage({ navigate }: PortalPageProps) {
   const handleSectionRoute = (sec: PortalSection, intent?: SidebarSubIntent) => {
     setActiveSection(sec);
     setActiveSidebarIntent(intent);
-    if (sec === 'courses' && (intent === 'courses' || intent === 'batches')) {
-      setCourseSubTab(intent);
+    if (sec === 'courses') {
+      setSelectedBatchId(null);
+      if (intent === 'courses' || intent === 'batches') {
+        setCourseSubTab(intent);
+      } else if (user?.role === 'branch_manager') {
+        setCourseSubTab('batches');
+      }
     }
     if (
       sec === 'catalog_cms' &&
@@ -987,20 +971,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 const allAnnouncements = data.announcements ?? [];
                 const allCertificates = data.certificates ?? [];
                 const branchesList = data.branches ?? bootstrap?.branches ?? [];
-                const instructorsList = bootstrap?.instructors ?? [];
-
-                const bq = batchSearch.trim().toLowerCase();
-                const filteredBatches = allBatches.filter((b) => {
-                  if (batchCourseFilter !== 'all' && b.courseId !== batchCourseFilter) return false;
-                  if (!bq) return true;
-                  return (
-                    b.name.toLowerCase().includes(bq) ||
-                    b.code.toLowerCase().includes(bq) ||
-                    b.schedule.toLowerCase().includes(bq)
-                  );
-                });
-
-                const openBatchCount = allBatches.filter((b) => b.status === 'open').length;
+                const instructorsList = data.instructors ?? bootstrap?.instructors ?? [];
 
                 return (
                   <div className="space-y-6">
@@ -1021,7 +992,10 @@ export function PortalPage({ navigate }: PortalPageProps) {
                             <button
                               key={tab.id}
                               type="button"
-                              onClick={() => setCourseSubTab(tab.id)}
+                              onClick={() => {
+                                setCourseSubTab(tab.id);
+                                if (tab.id !== 'batches') setSelectedBatchId(null);
+                              }}
                               className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-colors ${
                                 courseSubTab === tab.id
                                   ? 'bg-[#062436] text-white'
@@ -1064,6 +1038,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
                         onArchiveToggle={handleArchiveToggleCourse}
                         onDeleteCourse={handleDeleteCourse}
                         onNavigate={navigate}
+                        onManageCategories={() => handleSectionRoute('catalog_cms', 'categories')}
                         onRefresh={async () => {
                           await Promise.all([loadPortal(), refreshBootstrap()]);
                         }}
@@ -1461,178 +1436,46 @@ export function PortalPage({ navigate }: PortalPageProps) {
                           )}
                         </div>
                       </div>
+                    ) : selectedBatchId ? (
+                      <BatchDetailWorkspace
+                        batchId={selectedBatchId}
+                        courses={allCourses}
+                        allBatches={allBatches}
+                        branches={branchesList}
+                        instructors={instructorsList}
+                        userRole={user.role}
+                        darkMode={darkMode}
+                        onBack={() => setSelectedBatchId(null)}
+                        onOpenWizard={(bat) => {
+                          setEditingBatch(bat);
+                          setBatchModalOpen(true);
+                        }}
+                        onRefresh={async () => {
+                          await Promise.all([loadPortal(), refreshBootstrap()]);
+                        }}
+                        onNotify={notify}
+                      />
                     ) : (
-                      /* COURSE BATCHES & SCHEDULES STUDIO */
-                      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <div>
-                            <h2 className="text-lg font-extrabold text-slate-900">
-                              Course Batches & Class Routine Studio
-                            </h2>
-                            <p className="mt-0.5 text-xs text-slate-500">
-                              <span className="font-mono-tabular font-bold text-slate-700">{allBatches.length}</span> Total Batches ·{' '}
-                              <span className="font-mono-tabular font-bold text-emerald-700">{openBatchCount}</span> Open for Admission
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingBatch(null);
-                              setBatchModalOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700"
-                          >
-                            <Plus className="h-4 w-4" />
-                            <span>Create New Batch</span>
-                          </button>
-                        </div>
-
-                        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-12">
-                          <div className="relative sm:col-span-6">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                              type="search"
-                              value={batchSearch}
-                              onChange={(e) => setBatchSearch(e.target.value)}
-                              placeholder="Search batches by name, code, or schedule..."
-                              aria-label="Search course batches"
-                              className="w-full rounded-xl border border-slate-300 py-2 pl-9 pr-3 text-xs focus:border-indigo-500 focus:outline-none"
-                            />
-                          </div>
-                          <select
-                            value={batchCourseFilter}
-                            onChange={(e) => setBatchCourseFilter(e.target.value)}
-                            aria-label="Filter batches by course"
-                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold sm:col-span-6"
-                          >
-                            <option value="all">All Courses</option>
-                            {allCourses.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.title}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-                          {filteredBatches.length === 0 ? (
-                            <p className="col-span-full py-8 text-center text-xs text-slate-500">
-                              No course batches match your filter.
-                            </p>
-                          ) : (
-                            filteredBatches.map((bat) => {
-                              const parentCourse = allCourses.find((c) => c.id === bat.courseId);
-                              const branchObj = branchesList.find((b) => b.id === bat.branchId);
-                              const instObj = instructorsList.find((i) => i.id === bat.instructorId);
-                              const seats = computeBatchSeatUsage(bat);
-                              const isConfirming = confirmBatchDeleteId === bat.id;
-
-                              return (
-                                <div
-                                  key={bat.id}
-                                  className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/50 p-4"
-                                >
-                                  <div>
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <span className="font-mono-tabular rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
-                                        {bat.code}
-                                      </span>
-                                      <select
-                                        aria-label={`Status for ${bat.name}`}
-                                        value={bat.status}
-                                        onChange={(e) =>
-                                          handleBatchStatusChange(
-                                            bat,
-                                            e.target.value as CourseBatch['status']
-                                          )
-                                        }
-                                        className={`rounded-lg border px-2 py-1 text-[11px] font-bold uppercase ${
-                                          bat.status === 'open'
-                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                            : bat.status === 'running'
-                                              ? 'border-sky-200 bg-sky-50 text-sky-700'
-                                              : 'border-slate-200 bg-slate-100 text-slate-600'
-                                        }`}
-                                      >
-                                        <option value="open">Open</option>
-                                        <option value="running">Running</option>
-                                        <option value="closed">Closed</option>
-                                      </select>
-                                    </div>
-                                    <h3 className="mt-2.5 text-sm font-extrabold text-slate-900">
-                                      {bat.name}
-                                    </h3>
-                                    <p className="line-clamp-1 text-xs font-semibold text-indigo-700">
-                                      {parentCourse?.title || 'Course Batch'}
-                                    </p>
-                                    <div className="mt-2.5 space-y-1 text-xs text-slate-600">
-                                      <p className="flex items-center gap-1.5">
-                                        <CalendarClock className="h-3.5 w-3.5 text-slate-400" />
-                                        <span>{bat.schedule}</span>
-                                      </p>
-                                      <p>
-                                        Mode: <strong className="text-slate-800">{bat.mode}</strong> · Starts{' '}
-                                        <span className="font-mono-tabular">{bat.startDate}</span>
-                                      </p>
-                                      <p>
-                                        Branch: {branchObj?.name || 'Online'} · Lead:{' '}
-                                        {instObj?.name || 'Faculty'}
-                                      </p>
-                                    </div>
-
-                                    <div className="mt-3">
-                                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-                                        <span>
-                                          Seats: {bat.enrolledSeats}/{bat.seatLimit}
-                                        </span>
-                                        <span>{seats.remainingSeats} left</span>
-                                      </div>
-                                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                                        <div
-                                          className="h-full bg-indigo-600"
-                                          style={{ width: `${seats.fillPercent}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingBatch(bat);
-                                        setBatchModalOpen(true);
-                                      }}
-                                      aria-label={`Edit batch ${bat.name}`}
-                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:border-indigo-400 hover:text-indigo-700"
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" />
-                                      <span>Edit Batch</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteBatch(bat.id)}
-                                      aria-label={
-                                        isConfirming
-                                          ? `Confirm delete batch ${bat.name}`
-                                          : `Delete batch ${bat.name}`
-                                      }
-                                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                                        isConfirming
-                                          ? 'bg-rose-600 text-white'
-                                          : 'border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                                      }`}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                      <span>{isConfirming ? 'Confirm Delete' : 'Delete'}</span>
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
+                      <BatchEnterpriseDashboard
+                        batches={allBatches}
+                        courses={allCourses}
+                        branches={branchesList}
+                        instructors={instructorsList}
+                        enrollments={data.enrollments ?? []}
+                        attendance={data.attendance ?? []}
+                        transactions={data.transactions ?? []}
+                        userRole={user.role}
+                        darkMode={darkMode}
+                        onOpenWizard={(bat) => {
+                          setEditingBatch(bat);
+                          setBatchModalOpen(true);
+                        }}
+                        onOpenDetail={(bId) => setSelectedBatchId(bId)}
+                        onRefresh={async () => {
+                          await Promise.all([loadPortal(), refreshBootstrap()]);
+                        }}
+                        onNotify={notify}
+                      />
                     )}
                   </div>
                 );
@@ -2535,6 +2378,8 @@ export function PortalPage({ navigate }: PortalPageProps) {
                     </div>
                   )}
 
+                  <StudentBatchPortal onNavigate={navigate} />
+
                   <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
                     <div className="flex items-center justify-between">
                       <h2 className="text-lg font-extrabold text-slate-900">My Enrolled Courses</h2>
@@ -3124,13 +2969,12 @@ export function PortalPage({ navigate }: PortalPageProps) {
 
       {(user.role === 'admin' || user.role === 'teacher' || user.role === 'branch_manager') &&
         data && (
-          <AdminBatchModal
+          <BatchWizardModal
             open={batchModalOpen}
             batch={editingBatch}
             courses={data.courses ?? []}
             branches={data.branches ?? bootstrap?.branches ?? []}
-            instructors={bootstrap?.instructors ?? []}
-            defaultCourseId={batchCourseFilter !== 'all' ? batchCourseFilter : undefined}
+            instructors={data.instructors ?? bootstrap?.instructors ?? []}
             onClose={() => setBatchModalOpen(false)}
             onSaved={async (msg) => {
               await Promise.all([loadPortal(), refreshBootstrap()]);

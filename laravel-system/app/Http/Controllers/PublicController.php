@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Branch;
+use App\Models\Category;
 use App\Models\CenterResult;
 use App\Models\Coupon;
 use App\Models\Course;
@@ -85,7 +86,13 @@ class PublicController extends Controller
         $combos = $courses->where('is_combo', true)->values();
         $regularCourses = $courses->where('is_combo', false)->values();
 
-        return view('courses.index', compact('courses', 'combos', 'regularCourses', 'category', 'search', 'sort'));
+        $dbCats = Category::where('type', 'course')->where('active', true)->pluck('name')->all();
+        $courseCategories = array_values(array_unique(array_merge(
+            ['All Courses', 'Combos', 'HSC English', 'SSC English', 'IELTS & Spoken', 'Grammar Pro', 'Admission', 'Combo Packs'],
+            $dbCats
+        )));
+
+        return view('courses.index', compact('courses', 'combos', 'regularCourses', 'category', 'search', 'sort', 'courseCategories'));
     }
 
     public function courseDetail(string $slug)

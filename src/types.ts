@@ -89,22 +89,185 @@ export interface CourseChapter {
   orderIndex: number;
 }
 
+export type BatchLifecycleStatus =
+  | 'draft'
+  | 'upcoming'
+  | 'enrollment_open'
+  | 'enrollment_closed'
+  | 'active'
+  | 'completed'
+  | 'cancelled'
+  | 'archived';
+
+export type BatchWeekDay = 'Sat' | 'Sun' | 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri';
+
+export interface BatchTeacherAssignment {
+  instructorId: string;
+  role: 'main' | 'assistant' | 'co_teacher';
+  responsibility: string;
+  assignedAt: string;
+  assignedBy?: string;
+}
+
+export interface BatchTeacherHistoryEntry {
+  id: string;
+  instructorId: string;
+  instructorName: string;
+  role: 'main' | 'assistant' | 'co_teacher';
+  action: 'assigned' | 'role_changed' | 'removed';
+  note: string;
+  actorName: string;
+  at: string;
+}
+
+export interface BatchScheduleSlot {
+  id: string;
+  title?: string;
+  dayOfWeek: BatchWeekDay;
+  startTime: string; // HH:MM (24h, e.g. "16:30")
+  endTime: string;   // HH:MM (24h, e.g. "18:00")
+  durationMinutes: number;
+  breakMinutes?: number;
+  instructorId?: string;
+  roomLabel?: string;
+  sessionDate?: string; // Optional specific date override YYYY-MM-DD
+  status: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled';
+  rescheduledFrom?: string;
+  cancelReason?: string;
+  topic?: string;
+}
+
+export interface BatchClassroomSettings {
+  classroomName?: string;
+  building?: string;
+  floor?: string;
+  roomNumber?: string;
+}
+
+export interface BatchOnlineSettings {
+  platform?: 'Zoom' | 'Google Meet' | 'Microsoft Teams' | 'Alom Live' | string;
+  meetingLink?: string;
+  meetingId?: string;
+  meetingPassword?: string;
+  instructions?: string;
+  credentialsProtected?: boolean;
+}
+
+export interface BatchFeeSettings {
+  admissionFee?: number;
+  monthlyFee?: number;
+  courseFeeOverride?: number | null;
+  installmentEnabled?: boolean;
+  installmentOptions?: string;
+  paymentDeadline?: string;
+  latePaymentPolicy?: string;
+  batchDiscountPercent?: number;
+}
+
+export interface BatchWaitlistEntry {
+  id: string;
+  batchId: string;
+  courseId: string;
+  userId: string;
+  studentName: string;
+  studentEmail: string;
+  phone?: string;
+  priority: number;
+  status: 'waiting' | 'promoted' | 'cancelled';
+  note?: string;
+  createdAt: string;
+}
+
+export interface BatchTransferRecord {
+  id: string;
+  enrollmentId: string;
+  studentUserId: string;
+  studentName: string;
+  fromBatchId: string | null;
+  fromBatchName: string;
+  toBatchId: string;
+  toBatchName: string;
+  fromCourseId: string;
+  toCourseId: string;
+  reason: string;
+  preservedAttendanceCount: number;
+  preservedPaymentCount: number;
+  actorName: string;
+  transferredAt: string;
+}
+
+export interface BatchNotification {
+  id: string;
+  batchId: string;
+  courseId: string;
+  type:
+    | 'enrollment'
+    | 'batch_start'
+    | 'upcoming_class'
+    | 'schedule_change'
+    | 'teacher_change'
+    | 'class_cancelled'
+    | 'exam_announcement'
+    | 'payment_reminder'
+    | 'batch_completed';
+  title: string;
+  message: string;
+  recipientUserIds?: string[];
+  channel: 'in_app' | 'email_sms_ready';
+  readByUserIds?: string[];
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface BatchActivityLog {
+  id: string;
+  batchId: string;
+  actorId: string;
+  actorName: string;
+  actorRole: UserRole;
+  action: string;
+  details: string;
+  createdAt: string;
+}
+
 export interface CourseBatch {
   id: string;
   courseId: string;
   name: string;
   code: string;
+  description?: string;
+  thumbnail?: string;
   branchId: string;
   instructorId: string;
+  assistantInstructorId?: string | null;
+  teacherAssignments?: BatchTeacherAssignment[];
+  teacherAssignmentHistory?: BatchTeacherHistoryEntry[];
   schedule: string;
+  schedules?: BatchScheduleSlot[];
   classDurationMinutes?: number;
+  breakMinutes?: number;
+  weeklyFrequency?: number;
+  totalClasses?: number;
   classroomOrMeeting?: string;
+  classroom?: BatchClassroomSettings;
+  onlineSettings?: BatchOnlineSettings;
+  feeSettings?: BatchFeeSettings;
   startDate: string;
   endDate?: string;
+  enrollmentStartDate?: string;
+  enrollmentClosingDate?: string;
+  enrollmentDeadline?: string;
   seatLimit: number;
+  minStudents?: number;
   enrolledSeats: number;
+  waitlistEnabled?: boolean;
   mode: 'Online Live' | 'Offline Branch' | 'Hybrid';
+  batchType?: 'Offline' | 'Online' | 'Hybrid';
   status: 'open' | 'running' | 'closed';
+  lifecycleStatus?: BatchLifecycleStatus;
+  archivedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CourseLesson {
@@ -165,7 +328,7 @@ export interface Course {
   slug: string;
   title: string;
   subtitle: string;
-  category: 'HSC English' | 'SSC English' | 'IELTS & Spoken' | 'Grammar Pro' | 'Admission' | 'Combo Packs';
+  category: string;
   levelTag: string;
   level?: CourseLevel;
   language?: string;
@@ -310,6 +473,7 @@ export interface Exam {
   id: string;
   title: string;
   courseId: string | null;
+  batchId?: string | null;
   category: string;
   durationMinutes: number;
   passPercentage: number;
@@ -668,9 +832,10 @@ export interface AttendanceRecord {
   branchId: string | null;
   batchId?: string | null;
   date: string;
-  status: 'present' | 'absent' | 'late' | 'leave';
+  status: 'present' | 'absent' | 'late' | 'leave' | 'excused';
   checkInTime?: string;
   checkOutTime?: string;
+  notes?: string;
   recordedBy: string;
 }
 

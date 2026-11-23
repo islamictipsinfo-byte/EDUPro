@@ -55,12 +55,14 @@
   .no-print {
     display: none !important;
   }
+
   body {
     background: #ffffff !important;
     color: #0f172a !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
   .print-sheet {
     box-shadow: none !important;
     border-color: #cbd5e1 !important;
@@ -69,4 +71,3 @@
     margin: 0 !important;
   }
 }
-
