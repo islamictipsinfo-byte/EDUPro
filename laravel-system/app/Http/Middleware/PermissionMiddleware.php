@@ -11,16 +11,10 @@ class PermissionMiddleware
     public function handle(Request $request, Closure $next, string ...$permissions): Response
     {
         $user = $request->user();
-        if (!$user || $user->account_status !== 'active') {
-            abort(403, 'This account is not active.');
-        }
-
+        if (!$user || ($user->account_status ?? 'active') !== 'active') abort(403, 'This account is not active.');
         foreach ($permissions as $permission) {
-            if ($user->hasPermission($permission)) {
-                return $next($request);
-            }
+            if ($user->hasPermission($permission)) return $next($request);
         }
-
         abort(403, 'The account does not have the required permission.');
     }
 }

@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Schema;
 
 class User extends Authenticatable
 {
@@ -13,7 +15,6 @@ class User extends Authenticatable
     ];
 
     protected $hidden = ['password', 'remember_token'];
-
     protected $casts = ['suspended_at' => 'datetime'];
 
     public function branch() { return $this->belongsTo(Branch::class); }
@@ -25,19 +26,16 @@ class User extends Authenticatable
     public function hasRole(string $role): bool
     {
         if ($this->role === $role) return true;
-        if (!$this->exists || !\Illuminate\Support\Facades\Schema::hasTable('role_user')) return false;
+        if (!$this->exists || !Schema::hasTable('role_user')) return false;
         return $this->roles()->where('roles.name', $role)->exists();
     }
 
     public function hasPermission(string $permission): bool
     {
         if ($this->hasRole('super_admin')) return true;
-        if (!$this->exists || !\Illuminate\Support\Facades\Schema::hasTable('permission_role')) return in_array($this->role, ['admin'], true);
+        if (!$this->exists || !Schema::hasTable('permission_role')) return in_array($this->role, ['admin'], true);
         return $this->roles()->whereHas('permissions', fn ($query) => $query->where('permissions.name', $permission))->exists();
     }
 
-    public function scopeInBranch($query, ?int $branchId)
-    {
-        return $query->where('branch_id', $branchId);
-    }
+    public function scopeInBranch($query, ?int $branchId) { return $query->where('branch_id', $branchId); }
 }
