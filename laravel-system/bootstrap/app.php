@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
         then: function () {
             require __DIR__.'/../routes/dashboard.php';
             require __DIR__.'/../routes/account_management.php';
+            require __DIR__.'/../routes/learning_workspace.php';
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
