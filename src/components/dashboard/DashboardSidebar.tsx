@@ -101,7 +101,12 @@ export function DashboardSidebar({
     },
     {
       id: 'students',
-      label: user.role === 'student' ? 'My Learning' : 'Students',
+      label:
+        user.role === 'student'
+          ? 'My Learning'
+          : user.role === 'teacher'
+            ? 'Student Roster'
+            : 'Students',
       labelBn: user.role === 'student' ? 'আমার কোর্স' : 'শিক্ষার্থী',
       icon: GraduationCap,
       section: user.role === 'student' ? 'my_learning' : user.role === 'guardian' ? 'guardian_monitor' : 'enrollments',
@@ -216,6 +221,13 @@ export function DashboardSidebar({
       labelBn: 'অ্যাক্টিভিটি লগ',
       icon: Activity,
       section: 'activity_logs',
+    },
+    {
+      id: 'profile',
+      label: 'My Profile',
+      labelBn: 'আমার প্রোফাইল',
+      icon: Users,
+      section: 'profile',
     },
     {
       id: 'settings',

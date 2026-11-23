@@ -57,6 +57,7 @@ interface AuthContextValue {
     studentRollToLink?: string;
   }) => Promise<boolean>;
   logout: () => void;
+  updateUser: (nextUser: User) => void;
   refreshBootstrap: () => Promise<void>;
   apiFetch: <T = unknown>(url: string, init?: RequestInit) => Promise<T>;
 }
@@ -223,6 +224,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthError(null);
   }, []);
 
+  const updateUser = useCallback((nextUser: User) => {
+    setUser(nextUser);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -234,6 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         logout,
+        updateUser,
         refreshBootstrap,
         apiFetch,
       }}

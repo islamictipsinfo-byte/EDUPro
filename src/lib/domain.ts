@@ -31,6 +31,7 @@ export type PortalSection =
   | 'activity_logs'
   | 'guardian_monitor'
   | 'my_learning'
+  | 'profile'
   | 'settings';
 
 const ROLE_PORTAL_MATRIX: Record<UserRole, PortalSection[]> = {
@@ -49,6 +50,7 @@ const ROLE_PORTAL_MATRIX: Record<UserRole, PortalSection[]> = {
     'orders',
     'ai_ecosystem',
     'activity_logs',
+    'profile',
     'settings',
   ],
   branch_manager: [
@@ -59,14 +61,18 @@ const ROLE_PORTAL_MATRIX: Record<UserRole, PortalSection[]> = {
     'branches',
     'users',
     'orders',
+    'profile',
   ],
   teacher: [
     'overview',
     'courses',
     'lessons',
     'exams',
+    'enrollments',
+    'catalog_cms',
     'attendance_finance',
     'ai_ecosystem',
+    'profile',
   ],
   student: [
     'overview',
@@ -74,10 +80,12 @@ const ROLE_PORTAL_MATRIX: Record<UserRole, PortalSection[]> = {
     'ai_ecosystem',
     'enrollments',
     'orders',
+    'profile',
   ],
   guardian: [
     'overview',
     'guardian_monitor',
+    'profile',
   ],
 };
 
@@ -230,7 +238,9 @@ export function filterCourses(
   const catLower = category.trim().toLowerCase();
 
   const filtered = courses.filter((course) => {
-    if (!includeDrafts && course.status !== 'active') return false;
+    const isLive = course.status === 'active' || course.status === 'published';
+    const isPublicVis = (course.visibility ?? 'public') === 'public';
+    if (!includeDrafts && (!isLive || !isPublicVis)) return false;
     const matchesCategory =
       category === 'All' ||
       category === 'All Courses' ||

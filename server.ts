@@ -7,6 +7,7 @@ import { createServer as createViteServer } from 'vite';
 import {
   calculateDiscountedPrice,
   calculateOrderTotal,
+  computeBatchSeatUsage,
   computeHomepageStats,
   filterActivePaymentGateways,
   gradeExamSubmission,
@@ -15,8 +16,23 @@ import {
   parseImageUploadDataUrl,
   sanitizeSafeUrl,
 } from './src/lib/domain';
+import {
+  buildCourseJsonLd,
+  calculateCoursePricingServerSide,
+  canTeacherManageCourse,
+  generateCourseSlug,
+  getTeacherAssignedCourseIds,
+  isCoursePubliclyListed,
+  isCoursePubliclyLive,
+  isCourseStatusLive,
+  isLessonUnlockedForStudent,
+  resolveTeacherInstructorIds,
+  validateEnrollmentRequest,
+} from './src/lib/courseEnterprise';
+import { recalculateExamAttemptGrade, validateProfileUpdate } from './src/lib/usersAndTeaching';
 import { maskEmailForAudit } from './src/lib/auditLogs';
 import { createAiRouter } from './src/server/aiRoutes';
+import { createCourseEnterpriseRouter } from './src/server/courseEnterpriseRoutes';
 import { createPlatformRouter } from './src/server/platformRoutes';
 import {
   createDefaultHomepageConfig,
@@ -30,10 +46,18 @@ import {
 } from './src/server/store';
 import type {
   Branch,
+  CertificateCriteria,
   Course,
   CourseBatch,
+  CourseDeliveryType,
   CourseLesson,
+  CourseLevel,
+  CourseResource,
+  CourseSeoConfig,
+  CourseStatus,
+  CourseVisibility,
   Enrollment,
+  EnrollmentAvailability,
   Exam,
   ExamQuestion,
   HeroSlide,
@@ -97,7 +121,9 @@ function getBearerUser(req: Request): StoredUser | null {
   const payload = verifyToken(token);
   if (!payload) return null;
   const db = getDb();
-  return db.users.find((u) => u.id === payload.userId) ?? null;
+  const user = db.users.find((u) => u.id === payload.userId) ?? null;
+  if (!user || user.status === 'suspended') return null;
+  return user;
 }
 
 function requireAuth(req: AuthedRequest, res: Response, next: NextFunction): void {
@@ -181,13 +207,14 @@ async function startServer() {
   // Public bootstrap payload
   app.get('/api/public/bootstrap', (_req, res) => {
     const db = getDb();
+    const publicCourses = db.courses.filter((c) => isCoursePubliclyListed(c));
     const totalStudents =
       db.branches.reduce((sum, b) => sum + b.activeStudents, 0) +
       db.courses.reduce((sum, c) => sum + c.enrolledCount, 0);
 
     const liveStats = {
       students: totalStudents,
-      courses: db.courses.filter((c) => c.status === 'active').length,
+      courses: publicCourses.length,
       teachers: db.instructors.length,
       videos: db.lessons.length * 140 + 480,
     };
@@ -218,8 +245,9 @@ async function startServer() {
       paymentGateways: filterActivePaymentGateways(db.paymentGateways).map(
         ({ apiKeyMasked: _k, webhookSecretMasked: _w, ...pub }) => pub
       ),
-      courses: db.courses.filter((c) => c.status === 'active'),
+      courses: publicCourses,
       batches: db.batches,
+      modules: db.modules.filter((m) => (m.status ?? 'published') !== 'draft'),
       instructors: db.instructors,
       products: db.products,
       ebooks: db.ebooks.filter((e) => e.status !== 'draft'),
@@ -232,27 +260,66 @@ async function startServer() {
 
   app.get('/api/public/courses/:slug', (req, res) => {
     const db = getDb();
-    const course = db.courses.find((c) => c.slug === req.params.slug && c.status === 'active');
+    const course = db.courses.find((c) => c.slug === req.params.slug && isCoursePubliclyLive(c));
     if (!course) {
       res.status(404).json({ error: 'Course not found' });
       return;
     }
     const instructors = db.instructors.filter((i) => course.instructorIds.includes(i.id));
     const batches = db.batches.filter((b) => b.courseId === course.id);
+    const modules = db.modules
+      .filter((m) => m.courseId === course.id && (m.status ?? 'published') !== 'draft')
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    const chapters = db.chapters
+      .filter((ch) => ch.courseId === course.id)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
     const lessons = db.lessons
-      .filter((l) => l.courseId === course.id)
+      .filter((l) => l.courseId === course.id && (l.status ?? 'published') !== 'draft')
       .sort((a, b) => a.orderIndex - b.orderIndex)
       .map((l) => ({
         ...l,
         videoUrl: l.isFreePreview ? l.videoUrl : '',
+        audioUrl: l.isFreePreview ? l.audioUrl : undefined,
+        textContent: l.isFreePreview ? l.textContent : undefined,
         liveJoinUrl: l.isFreePreview ? l.liveJoinUrl : '',
         lectureSheetUrl: l.isFreePreview ? l.lectureSheetUrl : '',
+        externalUrl: l.isFreePreview ? l.externalUrl : undefined,
+        resources: l.isFreePreview ? l.resources : [],
         sheetSummary: l.isFreePreview ? l.sheetSummary : 'Available after enrollment',
       }));
     const branches = db.branches.filter(
       (b) => course.branchIds.includes(b.id) && b.status === 'active'
     );
-    res.json({ course, instructors, batches, lessons, branches });
+    const approvedReviews = db.reviews.filter(
+      (r) => (r.status ?? 'approved') === 'approved' && r.courseId === course.id
+    );
+    const fallbackReviews = db.reviews.filter(
+      (r) => (r.status ?? 'approved') === 'approved' && !r.courseId
+    );
+    const courseReviews = approvedReviews.length > 0 ? approvedReviews : fallbackReviews.slice(0, 3);
+    const averageRating =
+      courseReviews.length > 0
+        ? Number(
+            (
+              courseReviews.reduce((s, r) => s + Math.min(5, Math.max(1, r.rating || 5)), 0) /
+              courseReviews.length
+            ).toFixed(1)
+          )
+        : 5.0;
+
+    res.json({
+      course,
+      instructors,
+      batches,
+      modules,
+      chapters,
+      lessons,
+      branches,
+      reviews: approvedReviews,
+      averageRating,
+      reviewCount: approvedReviews.length,
+      seoJsonLd: buildCourseJsonLd(course, instructors, courseReviews),
+    });
   });
 
   app.post('/api/public/coupons/validate', (req, res) => {
@@ -420,6 +487,20 @@ async function startServer() {
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
+    if (user.status === 'suspended') {
+      recordAuditLog(
+        db,
+        user,
+        'USER_LOGIN_BLOCKED',
+        maskEmailForAudit(user.email),
+        'Suspended account login attempt',
+        'warning'
+      );
+      saveDb(db);
+      res.status(403).json({ error: 'This account is suspended. Please contact an administrator.' });
+      return;
+    }
+    user.lastLoginAt = new Date().toISOString();
     recordAuditLog(
       db,
       user,
@@ -436,6 +517,57 @@ async function startServer() {
     res.json({ user: sanitizeUser(req.authUser!) });
   });
 
+  // Self-service profile & security update for any authenticated user
+  app.patch('/api/auth/profile', requireAuth, (req: AuthedRequest, res) => {
+    const db = getDb();
+    const actor = db.users.find((u) => u.id === req.authUser!.id);
+    if (!actor) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    const name = String(req.body?.name ?? actor.name).trim();
+    const phone = String(req.body?.phone ?? actor.phone).trim();
+    const bio = req.body?.bio !== undefined ? String(req.body.bio).trim().slice(0, 300) : actor.bio;
+    const subjectSpecialty =
+      req.body?.subjectSpecialty !== undefined
+        ? String(req.body.subjectSpecialty).trim().slice(0, 120)
+        : actor.subjectSpecialty;
+    const avatar =
+      req.body?.avatar !== undefined
+        ? sanitizeSafeUrl(String(req.body.avatar), actor.avatar ?? '')
+        : actor.avatar;
+    const currentPassword = String(req.body?.currentPassword ?? '');
+    const newPassword = String(req.body?.newPassword ?? '');
+
+    const check = validateProfileUpdate({ name, phone, currentPassword, newPassword });
+    if (check.ok === false) {
+      res.status(400).json({ error: check.error });
+      return;
+    }
+    if (newPassword.trim()) {
+      if (!verifyPassword(currentPassword, actor.passwordHash)) {
+        res.status(400).json({ error: 'Current password is incorrect' });
+        return;
+      }
+      actor.passwordHash = hashPassword(newPassword.trim());
+    }
+    actor.name = name;
+    actor.phone = phone;
+    actor.bio = bio;
+    actor.subjectSpecialty = subjectSpecialty;
+    if (avatar !== undefined) actor.avatar = avatar || undefined;
+
+    recordAuditLog(
+      db,
+      actor,
+      'PROFILE_UPDATE',
+      maskEmailForAudit(actor.email),
+      newPassword.trim() ? 'Updated profile & password' : 'Updated profile details'
+    );
+    saveDb(db);
+    res.json({ user: sanitizeUser(actor) });
+  });
+
   // Student Learning, Enrollments, Exams, Orders, Ebooks
   app.get('/api/enrollments/my', requireAuth, (req: AuthedRequest, res) => {
     const db = getDb();
@@ -450,7 +582,7 @@ async function startServer() {
   app.post('/api/enrollments', requireAuth, (req: AuthedRequest, res) => {
     const user = req.authUser!;
     const courseId = String(req.body?.courseId ?? '').trim();
-    const branchId = String(req.body?.branchId ?? user.branchId ?? 'br-mirpur').trim();
+    const batchId = req.body?.batchId ? String(req.body.batchId).trim() : null;
     const paymentMethod = req.body?.paymentMethod as
       | 'bKash'
       | 'Nagad'
@@ -469,63 +601,71 @@ async function startServer() {
     }
 
     const db = getDb();
-    const course = db.courses.find((c) => c.id === courseId && c.status === 'active');
-    if (!course) {
-      res.status(404).json({ error: 'Course not found' });
+    const course = db.courses.find((c) => c.id === courseId && isCourseStatusLive(c.status));
+    const check = validateEnrollmentRequest({
+      userId: user.id,
+      course,
+      batchId,
+      batches: db.batches,
+      enrollments: db.enrollments,
+      branchId: req.body?.branchId ? String(req.body.branchId).trim() : null,
+      branches: db.branches,
+    });
+    if (check.ok === false) {
+      res.status(check.statusCode).json({ error: check.error });
       return;
     }
 
     const activeBranchFallback = db.branches.find((b) => b.status === 'active')?.id ?? '';
     const requestedBranchId = String(req.body?.branchId ?? '').trim() || activeBranchFallback;
-    const matchedBranch = requestedBranchId
-      ? db.branches.find((b) => b.id === requestedBranchId)
-      : undefined;
-    if (matchedBranch && matchedBranch.status !== 'active') {
-      res.status(400).json({ error: `Branch "${matchedBranch.name}" is currently inactive.` });
-      return;
-    }
-    const resolvedBranchId = matchedBranch?.id ?? activeBranchFallback ?? 'online';
-
-    const existing = db.enrollments.find(
-      (e) => e.userId === user.id && e.courseId === course.id && e.status !== 'rejected'
-    );
-    if (existing) {
-      res.status(409).json({ error: 'You are already enrolled or have a pending enrollment in this course' });
-      return;
-    }
+    const resolvedBranchId = check.resolvedBatch?.branchId ?? requestedBranchId ?? 'online';
 
     const coupon = couponCode
       ? db.coupons.find((c) => c.code.toUpperCase() === couponCode && c.active)
       : undefined;
-    const pricing = calculateDiscountedPrice(course.price, course.originalPrice, coupon);
+    const pricing = calculateCoursePricingServerSide(course!, coupon);
 
-    const status = paymentMethod === 'Branch Cash' ? 'pending' : 'approved';
-    const enrollment = {
+    const status = pricing.isFree ? 'approved' : paymentMethod === 'Branch Cash' ? 'pending' : 'approved';
+    const enrollment: Enrollment = {
       id: `enr-${Date.now()}`,
       userId: user.id,
       studentName: user.name,
       studentEmail: user.email,
-      courseId: course.id,
-      courseTitle: course.title,
+      courseId: course!.id,
+      courseTitle: course!.title,
+      batchId: check.resolvedBatch?.id ?? null,
+      batchName: check.resolvedBatch?.name,
       branchId: resolvedBranchId,
       paymentMethod,
-      amountPaid: pricing.finalPrice,
+      amountPaid: pricing.totalPayable,
       couponUsed: pricing.appliedCouponCode ?? undefined,
       status: status as 'approved' | 'pending',
       completedLessonIds: [],
+      history: [
+        {
+          id: `eh-${Date.now()}`,
+          action: 'created',
+          note: `Direct enrollment via ${paymentMethod} · ৳${pricing.totalPayable}`,
+          actorName: user.name,
+          createdAt: new Date().toISOString(),
+        },
+      ],
       enrolledAt: new Date().toISOString(),
     };
 
     db.enrollments.unshift(enrollment);
     if (status === 'approved') {
-      course.enrolledCount += 1;
+      course!.enrolledCount += 1;
+      if (check.resolvedBatch) {
+        check.resolvedBatch.enrolledSeats += 1;
+      }
     }
     recordAuditLog(
       db,
       user,
       'ENROLLMENT_CREATE',
-      course.title,
-      `${paymentMethod} · ৳${pricing.finalPrice} (${status})`
+      course!.title,
+      `${paymentMethod} · ৳${pricing.totalPayable} (${status})`
     );
     saveDb(db);
     res.status(201).json({ enrollment });
@@ -534,31 +674,75 @@ async function startServer() {
   app.get('/api/learn/courses', requireAuth, (req: AuthedRequest, res) => {
     const db = getDb();
     const user = req.authUser!;
+    const nowMs = Date.now();
     const approvedIds = new Set(
       db.enrollments
-        .filter((e) => e.userId === user.id && e.status === 'approved')
+        .filter(
+          (e) =>
+            e.userId === user.id &&
+            e.status === 'approved' &&
+            (!e.expiresAt || Date.parse(e.expiresAt) >= nowMs)
+        )
         .map((e) => e.courseId)
     );
-    // Admin & teacher get full access to inspect all courses
-    const hasAll = user.role === 'admin' || user.role === 'teacher';
-    const accessibleCourses = db.courses.filter((c) => hasAll || approvedIds.has(c.id));
+    const teacherCourseIds =
+      user.role === 'teacher'
+        ? getTeacherAssignedCourseIds(user, db.courses, db.instructors, db.batches)
+        : new Set<string>();
+    const isAdmin = user.role === 'admin';
+
+    const accessibleCourses = db.courses.filter(
+      (c) => isAdmin || teacherCourseIds.has(c.id) || approvedIds.has(c.id)
+    );
+
     const lessonsByCourse: Record<string, CourseLesson[]> = {};
+    const modulesByCourse: Record<string, typeof db.modules> = {};
+    const chaptersByCourse: Record<string, typeof db.chapters> = {};
+    const assignmentsByCourse: Record<string, typeof db.assignments> = {};
+
     for (const c of db.courses) {
+      const canSeeAllInCourse = isAdmin || teacherCourseIds.has(c.id);
+      const isEnrolledOrPriv = canSeeAllInCourse || approvedIds.has(c.id);
+
       const courseLessons = db.lessons
-        .filter((l) => l.courseId === c.id)
+        .filter((l) => l.courseId === c.id && (canSeeAllInCourse || (l.status ?? 'published') !== 'draft'))
         .sort((a, b) => a.orderIndex - b.orderIndex);
-      if (hasAll || approvedIds.has(c.id)) {
+
+      if (isEnrolledOrPriv) {
         lessonsByCourse[c.id] = courseLessons;
       } else {
         lessonsByCourse[c.id] = courseLessons.filter((l) => l.isFreePreview);
       }
+
+      modulesByCourse[c.id] = db.modules
+        .filter((m) => m.courseId === c.id && (canSeeAllInCourse || (m.status ?? 'published') !== 'draft'))
+        .sort((a, b) => a.orderIndex - b.orderIndex);
+      chaptersByCourse[c.id] = db.chapters
+        .filter((ch) => ch.courseId === c.id)
+        .sort((a, b) => a.orderIndex - b.orderIndex);
+      assignmentsByCourse[c.id] = isEnrolledOrPriv
+        ? db.assignments.filter((a) => a.courseId === c.id)
+        : [];
     }
+
     const enrollments = db.enrollments.filter((e) => e.userId === user.id);
+    const submissions = db.assignmentSubmissions.filter((s) => s.userId === user.id);
+    const announcements = db.announcements.filter(
+      (a) => isAdmin || teacherCourseIds.has(a.courseId) || approvedIds.has(a.courseId)
+    );
+    const certificates = db.certificates.filter((c) => c.userId === user.id && !c.revoked);
+
     res.json({
       accessibleCourses,
-      allCourses: db.courses,
+      allCourses: db.courses.filter((c) => isAdmin || teacherCourseIds.has(c.id) || isCoursePubliclyListed(c) || approvedIds.has(c.id)),
       batches: db.batches,
       lessonsByCourse,
+      modulesByCourse,
+      chaptersByCourse,
+      assignmentsByCourse,
+      submissions,
+      announcements,
+      certificates,
       enrollments,
     });
   });
@@ -575,6 +759,35 @@ async function startServer() {
       res.status(403).json({ error: 'Approved course enrollment required to track progress' });
       return;
     }
+    if (enrollment.expiresAt && Date.parse(enrollment.expiresAt) < Date.now()) {
+      res.status(403).json({ error: 'Your course enrollment access has expired.' });
+      return;
+    }
+
+    const course = db.courses.find((c) => c.id === courseId);
+    const publishedLessons = db.lessons
+      .filter((l) => l.courseId === courseId && (l.status ?? 'published') !== 'draft')
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+
+    const targetLesson = publishedLessons.find((l) => l.id === lessonId);
+    if (!targetLesson) {
+      res.status(404).json({ error: 'Lesson not found in this course.' });
+      return;
+    }
+
+    const unlockCheck = isLessonUnlockedForStudent(
+      course,
+      publishedLessons,
+      enrollment.completedLessonIds,
+      lessonId
+    );
+    if (!unlockCheck.unlocked) {
+      res.status(403).json({
+        error: `Complete "${unlockCheck.blockingLessonTitle}" first before marking this lesson complete.`,
+      });
+      return;
+    }
+
     if (!enrollment.completedLessonIds.includes(lessonId)) {
       enrollment.completedLessonIds.push(lessonId);
       saveDb(db);
@@ -774,7 +987,13 @@ async function startServer() {
         },
         courses: db.courses,
         batches: db.batches,
+        modules: db.modules,
+        chapters: db.chapters,
         lessons: db.lessons,
+        assignments: db.assignments,
+        assignmentSubmissions: db.assignmentSubmissions,
+        announcements: db.announcements,
+        certificates: db.certificates,
         exams: db.exams,
         examAttempts: db.examAttempts,
         branches: db.branches,
@@ -840,26 +1059,53 @@ async function startServer() {
     }
 
     if (user.role === 'teacher') {
-      const recentAttempts = db.examAttempts.slice(0, 20);
+      const assignedIds = getTeacherAssignedCourseIds(user, db.courses, db.instructors, db.batches);
+      const assignedCourses = db.courses.filter((c) => assignedIds.has(c.id));
+      const assignedBatches = db.batches.filter((b) => assignedIds.has(b.courseId));
+      const assignedModules = db.modules.filter((m) => assignedIds.has(m.courseId));
+      const assignedChapters = db.chapters.filter((ch) => assignedIds.has(ch.courseId));
+      const assignedLessons = db.lessons.filter((l) => assignedIds.has(l.courseId));
+      const assignedAssignments = db.assignments.filter((a) => assignedIds.has(a.courseId));
+      const assignedSubmissions = db.assignmentSubmissions.filter((s) => assignedIds.has(s.courseId));
+      const assignedAnnouncements = db.announcements.filter((a) => assignedIds.has(a.courseId));
+      const assignedCertificates = db.certificates.filter((c) => assignedIds.has(c.courseId));
+      const assignedEnrollments = db.enrollments.filter((e) => assignedIds.has(e.courseId));
+      const recentAttempts = db.examAttempts;
+
       return res.json({
         role: user.role,
+        assignedCourseIds: Array.from(assignedIds),
         metrics: {
-          activeCourses: db.courses.length,
-          totalBatches: db.batches.length,
-          totalLessons: db.lessons.length,
+          activeCourses: assignedCourses.length,
+          totalBatches: assignedBatches.length,
+          totalLessons: assignedLessons.length,
           totalExams: db.exams.length,
-          submissionsGraded: db.examAttempts.length,
+          submissionsGraded: db.examAttempts.length + assignedSubmissions.filter((s) => s.status === 'graded').length,
         },
-        courses: db.courses,
-        batches: db.batches,
-        lessons: db.lessons,
+        courses: assignedCourses,
+        batches: assignedBatches,
+        modules: assignedModules,
+        chapters: assignedChapters,
+        lessons: assignedLessons,
+        assignments: assignedAssignments,
+        assignmentSubmissions: assignedSubmissions,
+        announcements: assignedAnnouncements,
+        certificates: assignedCertificates,
         exams: db.exams,
         branches: db.branches,
+        users: db.users.filter((u) => u.role === 'student' || u.role === 'teacher').map(sanitizeUser),
+        enrollments: assignedEnrollments,
         examAttempts: recentAttempts,
+        rewardsByUser: db.rewardsByUser,
         questionBank: db.questionBank,
         scormPackages: db.scormPackages,
         attendance: db.attendance,
+        payrolls: db.payrolls.filter((p) => p.employeeId === user.id || p.employeeName === user.name),
         posts: db.posts,
+        ebooks: db.ebooks,
+        categories: db.categories,
+        instructors: db.instructors,
+        campaigns: db.campaigns,
       });
     }
 
@@ -873,7 +1119,7 @@ async function startServer() {
           const childLessonsCount: Record<string, number> = {};
           for (const enr of childEnrollments) {
             childLessonsCount[enr.courseId] = db.lessons.filter(
-              (l) => l.courseId === enr.courseId
+              (l) => l.courseId === enr.courseId && (l.status ?? 'published') !== 'draft'
             ).length;
           }
           return {
@@ -901,10 +1147,13 @@ async function startServer() {
     const myEnrollments = db.enrollments.filter((e) => e.userId === user.id);
     const myAttempts = db.examAttempts.filter((a) => a.userId === user.id);
     const myOrders = db.orders.filter((o) => o.userId === user.id);
+    const myApprovedCourseIds = new Set(
+      myEnrollments.filter((e) => e.status === 'approved').map((e) => e.courseId)
+    );
     return res.json({
       role: user.role,
       metrics: {
-        enrolledCourses: myEnrollments.filter((e) => e.status === 'approved').length,
+        enrolledCourses: myApprovedCourseIds.size,
         pendingCourses: myEnrollments.filter((e) => e.status === 'pending').length,
         examsTaken: myAttempts.length,
         ordersPlaced: myOrders.length,
@@ -914,13 +1163,30 @@ async function startServer() {
       orders: myOrders,
       courses: db.courses,
       batches: db.batches,
-      lessons: db.lessons,
+      modules: db.modules.filter((m) => (m.status ?? 'published') !== 'draft'),
+      lessons: db.lessons.filter((l) => (l.status ?? 'published') !== 'draft'),
+      assignments: db.assignments.filter((a) => myApprovedCourseIds.has(a.courseId)),
+      assignmentSubmissions: db.assignmentSubmissions.filter((s) => s.userId === user.id),
+      announcements: db.announcements.filter((a) => myApprovedCourseIds.has(a.courseId)),
+      certificates: db.certificates.filter((c) => c.userId === user.id && !c.revoked),
+      exams: db.exams.map(({ questions, ...rest }) => ({
+        ...rest,
+        questions: questions.map(({ correctIndex: _c, ...q }) => q),
+      })),
       scormPackages: db.scormPackages,
       scormAttempts: db.scormAttempts.filter((a) => a.userId === user.id),
       rewards: db.rewardsByUser[user.id] ?? null,
       transactions: db.transactions.filter((t) => t.userId === user.id),
     });
   });
+
+  const ALLOWED_COURSE_STATUSES: CourseStatus[] = [
+    'draft',
+    'published',
+    'active',
+    'unpublished',
+    'archived',
+  ];
 
   const ALLOWED_COURSE_CATEGORIES: Course['category'][] = [
     'HSC English',
@@ -945,36 +1211,131 @@ async function startServer() {
       ? (rawCat as Course['category'])
       : 'HSC English';
     const levelTag = String(body?.levelTag ?? existing?.levelTag ?? 'HSC 27').trim().slice(0, 40) || 'HSC 27';
+    const rawLevel = String(body?.level ?? existing?.level ?? 'Intermediate');
+    const level: CourseLevel =
+      rawLevel === 'Beginner' || rawLevel === 'Advanced' ? rawLevel : 'Intermediate';
+    const rawType = String(body?.courseType ?? existing?.courseType ?? 'Hybrid');
+    const courseType: CourseDeliveryType =
+      rawType === 'Offline' || rawType === 'Online' ? rawType : 'Hybrid';
+    const language = String(body?.language ?? existing?.language ?? 'Bangla & English').trim().slice(0, 60);
+    const tags = Array.isArray(body?.tags)
+      ? body.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 15)
+      : existing?.tags ?? [];
+
     const isCombo =
       typeof body?.isCombo === 'boolean'
         ? body.isCombo
         : category === 'Combo Packs'
           ? true
           : existing?.isCombo ?? false;
-    const price = Math.max(0, Math.round(Number(body?.price ?? existing?.price ?? 0) || 0));
+
+    const isFree =
+      typeof body?.isFree === 'boolean' ? body.isFree : existing?.isFree ?? false;
+    const price = isFree
+      ? 0
+      : Math.max(0, Math.round(Number(body?.price ?? existing?.price ?? 0) || 0));
     const rawOrig = Number(body?.originalPrice ?? existing?.originalPrice ?? price);
-    const originalPrice = Math.max(price, Math.round(Number.isFinite(rawOrig) ? rawOrig : price));
+    const originalPrice = isFree
+      ? 0
+      : Math.max(price, Math.round(Number.isFinite(rawOrig) ? rawOrig : price));
+    const admissionFee = isFree
+      ? 0
+      : Math.max(0, Math.round(Number(body?.admissionFee ?? existing?.admissionFee ?? 0) || 0));
+    const installmentEnabled =
+      typeof body?.installmentEnabled === 'boolean'
+        ? body.installmentEnabled
+        : existing?.installmentEnabled ?? false;
+    const installmentCount = Math.max(
+      1,
+      Math.min(12, Math.round(Number(body?.installmentCount ?? existing?.installmentCount ?? 2) || 2))
+    );
+    const paymentPolicy = String(body?.paymentPolicy ?? existing?.paymentPolicy ?? '').trim().slice(0, 500) || undefined;
+    const couponEligible =
+      typeof body?.couponEligible === 'boolean'
+        ? body.couponEligible
+        : existing?.couponEligible ?? true;
+
+    const durationLabel = String(body?.durationLabel ?? existing?.durationLabel ?? '4 Months').trim().slice(0, 60);
+    const totalClasses =
+      body?.totalClasses !== undefined
+        ? Math.max(1, Math.round(Number(body.totalClasses) || 1))
+        : existing?.totalClasses;
+    const estimatedHours =
+      body?.estimatedHours !== undefined
+        ? Math.max(1, Math.round(Number(body.estimatedHours) || 1))
+        : existing?.estimatedHours;
+    const maxCapacity =
+      body?.maxCapacity !== undefined && body.maxCapacity !== '' && body.maxCapacity !== null
+        ? Math.max(1, Math.round(Number(body.maxCapacity) || 0))
+        : existing?.maxCapacity;
+    const minEnrollment =
+      body?.minEnrollment !== undefined && body.minEnrollment !== '' && body.minEnrollment !== null
+        ? Math.max(0, Math.round(Number(body.minEnrollment) || 0))
+        : existing?.minEnrollment;
+    const startDate =
+      body?.startDate !== undefined ? String(body.startDate).trim().slice(0, 30) || undefined : existing?.startDate;
+    const endDate =
+      body?.endDate !== undefined ? String(body.endDate).trim().slice(0, 30) || undefined : existing?.endDate;
+    const enrollmentStartDate =
+      body?.enrollmentStartDate !== undefined
+        ? String(body.enrollmentStartDate).trim().slice(0, 30) || undefined
+        : existing?.enrollmentStartDate;
+    const enrollmentDeadline =
+      body?.enrollmentDeadline !== undefined
+        ? String(body.enrollmentDeadline).trim().slice(0, 30) || undefined
+        : existing?.enrollmentDeadline;
+
+    const prerequisites = Array.isArray(body?.prerequisites)
+      ? body.prerequisites.map((x) => String(x).trim()).filter(Boolean).slice(0, 12)
+      : existing?.prerequisites ?? [];
+    const learningOutcomes = Array.isArray(body?.learningOutcomes)
+      ? body.learningOutcomes.map((x) => String(x).trim()).filter(Boolean).slice(0, 16)
+      : existing?.learningOutcomes ?? [];
+    const targetAudience = Array.isArray(body?.targetAudience)
+      ? body.targetAudience.map((x) => String(x).trim()).filter(Boolean).slice(0, 12)
+      : existing?.targetAudience ?? [];
+
     const description =
       String(body?.description ?? existing?.description ?? subtitle).trim().slice(0, 4000) || subtitle;
     const examSystemIncluded =
       typeof body?.examSystemIncluded === 'boolean'
         ? body.examSystemIncluded
         : existing?.examSystemIncluded ?? true;
-    const status: 'active' | 'draft' =
-      body?.status === 'draft' ? 'draft' : body?.status === 'active' ? 'active' : existing?.status ?? 'active';
+
+    const rawStatus = String(body?.status ?? existing?.status ?? 'published');
+    const status: CourseStatus = ALLOWED_COURSE_STATUSES.includes(rawStatus as CourseStatus)
+      ? (rawStatus as CourseStatus)
+      : existing?.status ?? 'published';
+
+    const rawVis = String(body?.visibility ?? existing?.visibility ?? 'public');
+    const visibility: CourseVisibility =
+      rawVis === 'unlisted' || rawVis === 'private' ? rawVis : 'public';
+    const rawAvail = String(body?.enrollmentAvailability ?? existing?.enrollmentAvailability ?? 'open');
+    const enrollmentAvailability: EnrollmentAvailability =
+      rawAvail === 'closed' || rawAvail === 'upcoming' ? rawAvail : 'open';
+    const featured =
+      typeof body?.featured === 'boolean' ? body.featured : existing?.featured ?? false;
+    const sequentialAccess =
+      typeof body?.sequentialAccess === 'boolean'
+        ? body.sequentialAccess
+        : existing?.sequentialAccess ?? false;
 
     const defaultThumb = '/src/assets/images/hero_hsc_english_1795411661478.jpg';
     const thumbnail = sanitizeSafeUrl(
       String(body?.thumbnail ?? existing?.thumbnail ?? defaultThumb),
       existing?.thumbnail || defaultThumb
     );
+    const bannerImage =
+      body?.bannerImage !== undefined
+        ? sanitizeSafeUrl(String(body.bannerImage), '') || undefined
+        : existing?.bannerImage;
     const demoVideoTitle =
       String(body?.demoVideoTitle ?? existing?.demoVideoTitle ?? `${title} — Orientation Class`)
         .trim()
         .slice(0, 180) || `${title} — Orientation Class`;
     const demoYoutubeUrl = sanitizeSafeUrl(
-      String(body?.demoYoutubeUrl ?? existing?.demoYoutubeUrl ?? 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
-      'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+      String(body?.demoYoutubeUrl ?? existing?.demoYoutubeUrl ?? 'https://www.youtube.com/watch?v=M7lc1UVf-VE'),
+      'https://www.youtube.com/watch?v=M7lc1UVf-VE'
     );
 
     const validBranchIds = new Set(db.branches.map((b) => b.id));
@@ -1001,19 +1362,68 @@ async function startServer() {
         : existing?.includedCourses ?? []
       : undefined;
 
+    const rawCrit = (body?.certificateCriteria ?? existing?.certificateCriteria ?? {}) as Partial<CertificateCriteria>;
+    const certificateCriteria: CertificateCriteria = {
+      enabled: rawCrit.enabled !== false,
+      minProgressPercent: Math.min(100, Math.max(0, Math.round(Number(rawCrit.minProgressPercent ?? 80)))),
+      requireExamPass: Boolean(rawCrit.requireExamPass),
+      minExamPercent: Math.min(100, Math.max(0, Math.round(Number(rawCrit.minExamPercent ?? 50)))),
+      requireAssignmentCompletion: Boolean(rawCrit.requireAssignmentCompletion),
+    };
+
+    const rawSeo = (body?.seo ?? existing?.seo ?? {}) as Partial<CourseSeoConfig>;
+    const seo: CourseSeoConfig = {
+      metaTitle: String(rawSeo.metaTitle ?? '').trim().slice(0, 120) || undefined,
+      metaDescription: String(rawSeo.metaDescription ?? '').trim().slice(0, 220) || undefined,
+      metaKeywords: String(rawSeo.metaKeywords ?? '').trim().slice(0, 220) || undefined,
+      canonicalUrl: rawSeo.canonicalUrl ? sanitizeSafeUrl(String(rawSeo.canonicalUrl), '') : undefined,
+      ogTitle: String(rawSeo.ogTitle ?? '').trim().slice(0, 120) || undefined,
+      ogDescription: String(rawSeo.ogDescription ?? '').trim().slice(0, 220) || undefined,
+      ogImage: rawSeo.ogImage ? sanitizeSafeUrl(String(rawSeo.ogImage), '') : undefined,
+      noIndex: Boolean(rawSeo.noIndex),
+    };
+
+    const customSlug = typeof body?.slug === 'string' && body.slug.trim()
+      ? generateCourseSlug(body.slug, db.courses, existing?.id)
+      : existing?.slug;
+
     return {
+      slug: customSlug,
       title,
       subtitle,
       category,
       levelTag,
+      level,
+      courseType,
+      language,
+      tags,
       isCombo,
       includedCourses,
       price,
       originalPrice,
+      admissionFee,
+      installmentEnabled,
+      installmentCount,
+      paymentPolicy,
+      isFree,
+      couponEligible,
+      durationLabel,
+      totalClasses,
+      estimatedHours,
+      maxCapacity,
+      minEnrollment,
+      startDate,
+      endDate,
+      enrollmentStartDate,
+      enrollmentDeadline,
+      prerequisites,
+      learningOutcomes,
+      targetAudience,
       examSystemIncluded,
       branchIds: branchIds.length > 0 ? branchIds : db.branches.map((b) => b.id),
       instructorIds: instructorIds.length > 0 ? instructorIds : ['inst-1'],
       thumbnail,
+      bannerImage,
       description,
       highlights:
         highlights.length > 0
@@ -1022,18 +1432,43 @@ async function startServer() {
       demoVideoTitle,
       demoYoutubeUrl,
       status,
+      featured,
+      visibility,
+      enrollmentAvailability,
+      sequentialAccess,
+      certificateCriteria,
+      seo,
     };
   }
 
-  // Admin & Teacher: List all courses (including drafts), batches, and lessons
-  app.get('/api/portal/courses', requireAuth, requireRole(['admin', 'teacher']), (_req, res) => {
+  // Admin & Teacher: List courses (scoped to assigned for teachers), batches, modules, chapters, and lessons
+  app.get('/api/portal/courses', requireAuth, requireRole(['admin', 'teacher']), (req: AuthedRequest, res) => {
     const db = getDb();
-    res.json({ courses: db.courses, batches: db.batches, lessons: db.lessons });
+    const actor = req.authUser!;
+    if (actor.role === 'teacher') {
+      const assignedIds = getTeacherAssignedCourseIds(actor, db.courses, db.instructors, db.batches);
+      return res.json({
+        courses: db.courses.filter((c) => assignedIds.has(c.id)),
+        batches: db.batches.filter((b) => assignedIds.has(b.courseId)),
+        modules: db.modules.filter((m) => assignedIds.has(m.courseId)),
+        chapters: db.chapters.filter((ch) => assignedIds.has(ch.courseId)),
+        lessons: db.lessons.filter((l) => assignedIds.has(l.courseId)),
+        assignedCourseIds: Array.from(assignedIds),
+      });
+    }
+    res.json({
+      courses: db.courses,
+      batches: db.batches,
+      modules: db.modules,
+      chapters: db.chapters,
+      lessons: db.lessons,
+    });
   });
 
-  // Admin: Create Course or Combo
-  app.post('/api/portal/courses', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+  // Admin & Teacher: Create Course or Combo (supports 5-step Wizard payloads)
+  app.post('/api/portal/courses', requireAuth, requireRole(['admin', 'teacher']), (req: AuthedRequest, res) => {
     const db = getDb();
+    const actor = req.authUser!;
     const parsed = parseCoursePayload((req.body ?? {}) as Record<string, unknown>, db);
 
     if (!parsed.title || !parsed.subtitle) {
@@ -1041,24 +1476,64 @@ async function startServer() {
       return;
     }
 
-    const baseSlug =
-      parsed.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '') || 'course';
-    const slug = `${baseSlug}-${Date.now().toString().slice(-4)}`;
+    const slug = parsed.slug || generateCourseSlug(parsed.title, db.courses);
+    const teacherInstIds =
+      actor.role === 'teacher'
+        ? Array.from(resolveTeacherInstructorIds(actor, db.instructors)).filter((id) =>
+            db.instructors.some((i) => i.id === id)
+          )
+        : [];
+    const instructorIds =
+      teacherInstIds.length > 0
+        ? Array.from(new Set([...teacherInstIds, ...parsed.instructorIds]))
+        : parsed.instructorIds;
 
     const course: Course = {
       id: `crs-${Date.now()}`,
-      slug,
       ...parsed,
+      slug,
+      instructorIds,
+      createdByUserId: actor.id,
       enrolledCount: Math.max(0, Math.round(Number(req.body?.enrolledCount) || 0)),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     db.courses.unshift(course);
+
+    // Optional initial batches from Step 4 of Wizard
+    if (Array.isArray(req.body?.initialBatches)) {
+      req.body.initialBatches.forEach((rawBatch: Record<string, unknown>, idx: number) => {
+        const bName = String(rawBatch?.name ?? '').trim();
+        if (!bName) return;
+        const bParsed = parseBatchPayload({ ...rawBatch, courseId: course.id }, db);
+        db.batches.unshift({
+          id: `bat-${Date.now()}-${idx}`,
+          ...bParsed,
+          courseId: course.id,
+          code: bParsed.code || `BAT-${Date.now().toString().slice(-4)}-${idx + 1}`,
+        });
+      });
+    }
+
+    // Optional template sample modules
+    if (Array.isArray(req.body?.initialModules)) {
+      req.body.initialModules.forEach((modTitle: unknown, idx: number) => {
+        const cleanTitle = String(modTitle ?? '').trim();
+        if (!cleanTitle) return;
+        db.modules.push({
+          id: `mod-${Date.now()}-${idx}`,
+          courseId: course.id,
+          title: cleanTitle,
+          orderIndex: idx + 1,
+          status: 'published',
+        });
+      });
+    }
+
     recordAuditLog(
       db,
-      req.authUser!,
+      actor,
       'COURSE_CREATE',
       course.title,
       `${course.category} · ৳${course.price} (${course.status})`
@@ -1067,15 +1542,20 @@ async function startServer() {
     res.status(201).json({ course });
   });
 
-  // Admin: Modify an existing Course or Combo
-  app.put('/api/portal/courses/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+  // Admin & Teacher: Modify an existing Course or Combo (teacher must be assigned)
+  app.put('/api/portal/courses/:id', requireAuth, requireRole(['admin', 'teacher']), (req: AuthedRequest, res) => {
     const db = getDb();
+    const actor = req.authUser!;
     const idx = db.courses.findIndex((c) => c.id === req.params.id);
     if (idx === -1) {
       res.status(404).json({ error: 'Course not found' });
       return;
     }
     const existing = db.courses[idx];
+    if (!canTeacherManageCourse(actor, existing, db.instructors, db.batches)) {
+      res.status(403).json({ error: 'You are not assigned to edit this course.' });
+      return;
+    }
     const parsed = parseCoursePayload((req.body ?? {}) as Record<string, unknown>, db, existing);
     if (!parsed.title || !parsed.subtitle) {
       res.status(400).json({ error: 'Course title and subtitle are required' });
@@ -1085,9 +1565,10 @@ async function startServer() {
     const updated: Course = {
       ...existing,
       ...parsed,
+      slug: parsed.slug || existing.slug,
+      updatedAt: new Date().toISOString(),
     };
     db.courses[idx] = updated;
-    // Keep enrollment courseTitle snapshots aligned if title changed
     for (const enr of db.enrollments) {
       if (enr.courseId === updated.id) {
         enr.courseTitle = updated.title;
@@ -1095,7 +1576,7 @@ async function startServer() {
     }
     recordAuditLog(
       db,
-      req.authUser!,
+      actor,
       'COURSE_UPDATE',
       updated.title,
       `${updated.category} · ৳${updated.price} (${updated.status})`
@@ -1104,28 +1585,34 @@ async function startServer() {
     res.json({ course: updated });
   });
 
-  // Admin: Toggle Active / Draft status
+  // Admin & Teacher: Switch Course Status (draft | published | active | unpublished | archived)
   app.patch(
     '/api/portal/courses/:id/status',
     requireAuth,
-    requireRole(['admin']),
+    requireRole(['admin', 'teacher']),
     (req: AuthedRequest, res) => {
       const db = getDb();
+      const actor = req.authUser!;
       const course = db.courses.find((c) => c.id === req.params.id);
       if (!course) {
         res.status(404).json({ error: 'Course not found' });
         return;
       }
-      const nextStatus = req.body?.status;
-      if (nextStatus !== 'active' && nextStatus !== 'draft') {
-        res.status(400).json({ error: 'Status must be active or draft' });
+      if (!canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to change status for this course.' });
+        return;
+      }
+      const nextStatus = req.body?.status as CourseStatus;
+      if (!ALLOWED_COURSE_STATUSES.includes(nextStatus)) {
+        res.status(400).json({ error: 'Status must be draft, published, active, unpublished, or archived' });
         return;
       }
       const prevStatus = course.status;
       course.status = nextStatus;
+      course.updatedAt = new Date().toISOString();
       recordAuditLog(
         db,
-        req.authUser!,
+        actor,
         'COURSE_STATUS',
         course.title,
         `Status changed ${prevStatus} -> ${nextStatus}`
@@ -1135,28 +1622,58 @@ async function startServer() {
     }
   );
 
-  // Admin: Duplicate Course (clones as Draft along with its lessons)
+  // Admin & Teacher: Duplicate Course (clones as Draft along with modules, chapters, and lessons)
   app.post(
     '/api/portal/courses/:id/duplicate',
     requireAuth,
-    requireRole(['admin']),
+    requireRole(['admin', 'teacher']),
     (req: AuthedRequest, res) => {
       const db = getDb();
+      const actor = req.authUser!;
       const source = db.courses.find((c) => c.id === req.params.id);
       if (!source) {
         res.status(404).json({ error: 'Course not found' });
         return;
       }
+      if (!canTeacherManageCourse(actor, source, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to duplicate this course.' });
+        return;
+      }
       const suffix = Date.now().toString().slice(-4);
+      const cloneId = `crs-${Date.now()}`;
       const clone: Course = {
         ...source,
-        id: `crs-${Date.now()}`,
-        slug: `${source.slug}-copy-${suffix}`,
+        id: cloneId,
+        slug: generateCourseSlug(`${source.slug}-copy-${suffix}`, db.courses),
         title: `${source.title} (Copy)`,
         enrolledCount: 0,
         status: 'draft',
+        createdByUserId: actor.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       db.courses.unshift(clone);
+
+      const modIdMap = new Map<string, string>();
+      const sourceModules = db.modules.filter((m) => m.courseId === source.id);
+      sourceModules.forEach((m, i) => {
+        const newModId = `mod-${Date.now()}-${i}`;
+        modIdMap.set(m.id, newModId);
+        db.modules.push({ ...m, id: newModId, courseId: clone.id });
+      });
+
+      const chapIdMap = new Map<string, string>();
+      const sourceChapters = db.chapters.filter((ch) => ch.courseId === source.id);
+      sourceChapters.forEach((ch, i) => {
+        const newChapId = `chp-${Date.now()}-${i}`;
+        chapIdMap.set(ch.id, newChapId);
+        db.chapters.push({
+          ...ch,
+          id: newChapId,
+          courseId: clone.id,
+          moduleId: modIdMap.get(ch.moduleId) ?? ch.moduleId,
+        });
+      });
 
       const sourceLessons = db.lessons.filter((l) => l.courseId === source.id);
       sourceLessons.forEach((l, i) => {
@@ -1164,12 +1681,14 @@ async function startServer() {
           ...l,
           id: `les-${Date.now()}-${i}`,
           courseId: clone.id,
+          moduleId: l.moduleId ? modIdMap.get(l.moduleId) : undefined,
+          chapterId: l.chapterId ? chapIdMap.get(l.chapterId) : undefined,
         });
       });
 
       recordAuditLog(
         db,
-        req.authUser!,
+        actor,
         'COURSE_DUPLICATE',
         clone.title,
         `Duplicated from "${source.title}" (${sourceLessons.length} lessons)`
@@ -1226,6 +1745,16 @@ async function startServer() {
       .trim()
       .slice(0, 140);
     const startDate = String(body?.startDate ?? existing?.startDate ?? '2026-05-01').trim().slice(0, 40);
+    const endDate =
+      body?.endDate !== undefined ? String(body.endDate).trim().slice(0, 40) || undefined : existing?.endDate;
+    const classDurationMinutes =
+      body?.classDurationMinutes !== undefined
+        ? Math.max(15, Math.min(300, Math.round(Number(body.classDurationMinutes) || 60)))
+        : existing?.classDurationMinutes ?? 60;
+    const classroomOrMeeting =
+      body?.classroomOrMeeting !== undefined
+        ? String(body.classroomOrMeeting).trim().slice(0, 180) || undefined
+        : existing?.classroomOrMeeting;
     const seatLimit = Math.max(1, Math.min(5000, Math.round(Number(body?.seatLimit ?? existing?.seatLimit ?? 60) || 60)));
     const rawEnrolled = Number(body?.enrolledSeats ?? existing?.enrolledSeats ?? 0);
     const enrolledSeats = Math.max(0, Math.min(seatLimit, Math.round(Number.isFinite(rawEnrolled) ? rawEnrolled : 0)));
@@ -1246,6 +1775,9 @@ async function startServer() {
       instructorId,
       schedule,
       startDate,
+      endDate,
+      classDurationMinutes,
+      classroomOrMeeting,
       seatLimit,
       enrolledSeats,
       mode,
@@ -1265,8 +1797,13 @@ async function startServer() {
         res.status(400).json({ error: 'Course, batch name, and batch code are required' });
         return;
       }
-      if (!db.courses.some((c) => c.id === parsed.courseId)) {
+      const course = db.courses.find((c) => c.id === parsed.courseId);
+      if (!course) {
         res.status(404).json({ error: 'Target course not found' });
+        return;
+      }
+      if (actor.role === 'teacher' && !canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to create batches for this course.' });
         return;
       }
       if (actor.role === 'branch_manager' && actor.branchId && parsed.branchId !== actor.branchId) {
@@ -1297,6 +1834,11 @@ async function startServer() {
         return;
       }
       const existing = db.batches[idx];
+      const course = db.courses.find((c) => c.id === existing.courseId);
+      if (actor.role === 'teacher' && !canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to edit batches for this course.' });
+        return;
+      }
       if (actor.role === 'branch_manager' && actor.branchId && existing.branchId !== actor.branchId) {
         res.status(403).json({ error: 'Branch managers can only edit batches in their own branch' });
         return;
@@ -1331,6 +1873,11 @@ async function startServer() {
         res.status(404).json({ error: 'Batch not found' });
         return;
       }
+      const course = db.courses.find((c) => c.id === batch.courseId);
+      if (actor.role === 'teacher' && !canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to manage this batch.' });
+        return;
+      }
       if (actor.role === 'branch_manager' && actor.branchId && batch.branchId !== actor.branchId) {
         res.status(403).json({ error: 'Branch managers can only manage batches in their own branch' });
         return;
@@ -1360,12 +1907,17 @@ async function startServer() {
         res.status(404).json({ error: 'Batch not found' });
         return;
       }
-      const [removed] = db.batches.splice(idx, 1);
-      if (actor.role === 'branch_manager' && actor.branchId && removed.branchId !== actor.branchId) {
-        db.batches.splice(idx, 0, removed);
+      const existing = db.batches[idx];
+      const course = db.courses.find((c) => c.id === existing.courseId);
+      if (actor.role === 'teacher' && !canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to delete this batch.' });
+        return;
+      }
+      if (actor.role === 'branch_manager' && actor.branchId && existing.branchId !== actor.branchId) {
         res.status(403).json({ error: 'Branch managers can only delete batches in their own branch' });
         return;
       }
+      const [removed] = db.batches.splice(idx, 1);
       for (const l of db.lessons) {
         if (l.batchId === removed.id) {
           l.batchId = null;
@@ -1390,7 +1942,20 @@ async function startServer() {
   // ============================================================================
   // LECTURES, LIVE CLASSES & RECORDED VIDEOS CRUD (Admin & Teacher)
   // ============================================================================
-  const ALLOWED_LESSON_TYPES: LessonType[] = ['recorded', 'live', 'lecture_sheet'];
+  const ALLOWED_LESSON_TYPES: LessonType[] = [
+    'recorded',
+    'video',
+    'text',
+    'audio',
+    'lecture_sheet',
+    'pdf_notes',
+    'document',
+    'external',
+    'quiz',
+    'assignment',
+    'live',
+    'practice_test',
+  ];
   const ALLOWED_LIVE_STATUSES: LiveClassStatus[] = ['scheduled', 'live_now', 'ended'];
 
   function parseLessonPayload(
@@ -1414,9 +1979,23 @@ async function startServer() {
       : 'recorded';
 
     const title = String(body?.title ?? existing?.title ?? '').trim().slice(0, 180);
-    const moduleName = String(body?.moduleName ?? existing?.moduleName ?? 'Module 1: Core Grammar')
-      .trim()
-      .slice(0, 140);
+
+    const moduleId = body?.moduleId !== undefined
+      ? (body.moduleId ? String(body.moduleId).trim() : undefined)
+      : existing?.moduleId;
+    const linkedMod = moduleId ? db.modules.find((m) => m.id === moduleId && m.courseId === courseId) : undefined;
+    const chapterId = body?.chapterId !== undefined
+      ? (body.chapterId ? String(body.chapterId).trim() : undefined)
+      : existing?.chapterId;
+    const linkedChapter = chapterId
+      ? db.chapters.find((ch) => ch.id === chapterId && ch.courseId === courseId)
+      : undefined;
+
+    const moduleName = linkedMod
+      ? linkedMod.title
+      : String(body?.moduleName ?? existing?.moduleName ?? 'Module 1: Core Grammar')
+          .trim()
+          .slice(0, 140);
     const duration = String(body?.duration ?? existing?.duration ?? '35:00').trim().slice(0, 40);
     const sheetSummary =
       String(body?.sheetSummary ?? existing?.sheetSummary ?? '').trim().slice(0, 2000) ||
@@ -1425,19 +2004,76 @@ async function startServer() {
       typeof body?.isFreePreview === 'boolean'
         ? body.isFreePreview
         : existing?.isFreePreview ?? false;
+    const completionRequired =
+      typeof body?.completionRequired === 'boolean'
+        ? body.completionRequired
+        : existing?.completionRequired ?? true;
+    const sequentialLock =
+      typeof body?.sequentialLock === 'boolean'
+        ? body.sequentialLock
+        : existing?.sequentialLock ?? false;
+    const status: 'draft' | 'published' =
+      body?.status === 'draft' ? 'draft' : body?.status === 'published' ? 'published' : existing?.status ?? 'published';
 
     const videoUrl =
       typeof body?.videoUrl === 'string'
         ? sanitizeSafeUrl(body.videoUrl, '')
         : existing?.videoUrl ?? '';
+    const audioUrl =
+      body?.audioUrl !== undefined
+        ? sanitizeSafeUrl(String(body.audioUrl), '') || undefined
+        : existing?.audioUrl;
+    const textContent =
+      body?.textContent !== undefined
+        ? String(body.textContent).trim().slice(0, 15000) || undefined
+        : existing?.textContent;
     const lectureSheetUrl =
       typeof body?.lectureSheetUrl === 'string'
         ? sanitizeSafeUrl(body.lectureSheetUrl, '')
         : existing?.lectureSheetUrl ?? '';
+    const externalUrl =
+      body?.externalUrl !== undefined
+        ? sanitizeSafeUrl(String(body.externalUrl), '') || undefined
+        : existing?.externalUrl;
     const liveJoinUrl =
       typeof body?.liveJoinUrl === 'string'
         ? sanitizeSafeUrl(body.liveJoinUrl, '')
         : existing?.liveJoinUrl ?? '';
+    const linkedExamId =
+      body?.linkedExamId !== undefined
+        ? String(body.linkedExamId).trim() || undefined
+        : existing?.linkedExamId;
+    const linkedAssignmentId =
+      body?.linkedAssignmentId !== undefined
+        ? String(body.linkedAssignmentId).trim() || undefined
+        : existing?.linkedAssignmentId;
+
+    const ALLOWED_RESOURCE_KINDS: CourseResource['kind'][] = ['pdf', 'document', 'audio', 'external', 'slides'];
+    const resources: CourseResource[] | undefined = Array.isArray(body?.resources)
+      ? body.resources
+          .map((r: Record<string, unknown>, i: number) => {
+            const rawKind = String(r?.kind ?? r?.type ?? 'external').trim().toLowerCase();
+            const mappedKind =
+              rawKind === 'doc'
+                ? 'document'
+                : rawKind === 'link' || rawKind === 'video'
+                  ? 'external'
+                  : rawKind;
+            const kind: CourseResource['kind'] = ALLOWED_RESOURCE_KINDS.includes(
+              mappedKind as CourseResource['kind']
+            )
+              ? (mappedKind as CourseResource['kind'])
+              : 'external';
+            return {
+              id: String(r?.id ?? `res-${Date.now()}-${i}`),
+              title: String(r?.title ?? '').trim().slice(0, 120),
+              kind,
+              url: sanitizeSafeUrl(String(r?.url ?? ''), ''),
+              ...(r?.fileSize ? { fileSize: String(r.fileSize).trim().slice(0, 40) } : {}),
+            };
+          })
+          .filter((r) => r.title && r.url)
+      : existing?.resources;
 
     const rawLiveStatus = String(body?.liveStatus ?? existing?.liveStatus ?? 'scheduled');
     const liveStatus: LiveClassStatus | undefined =
@@ -1453,6 +2089,8 @@ async function startServer() {
 
     return {
       courseId,
+      moduleId: linkedMod?.id ?? moduleId,
+      chapterId: linkedChapter?.id ?? chapterId,
       batchId: linkedBatch ? linkedBatch.id : batchId,
       batchName,
       lessonType,
@@ -1460,13 +2098,25 @@ async function startServer() {
       moduleName,
       duration,
       videoPreviewTitle: title,
-      videoUrl: lessonType === 'recorded' && !videoUrl ? 'https://www.youtube.com/embed/dQw4w9WgXcQ' : videoUrl,
+      videoUrl:
+        (lessonType === 'recorded' || lessonType === 'video') && !videoUrl
+          ? 'https://www.youtube.com/embed/M7lc1UVf-VE'
+          : videoUrl,
+      audioUrl,
+      textContent,
       lectureSheetUrl,
+      externalUrl,
       liveJoinUrl,
       liveStatus,
       scheduledAt,
+      linkedExamId,
+      linkedAssignmentId,
+      resources,
       sheetSummary,
       isFreePreview,
+      completionRequired,
+      sequentialLock,
+      status,
     };
   }
 
@@ -1477,10 +2127,16 @@ async function startServer() {
     requireRole(['admin', 'teacher']),
     (req: AuthedRequest, res) => {
       const db = getDb();
+      const actor = req.authUser!;
       const parsed = parseLessonPayload((req.body ?? {}) as Record<string, unknown>, db);
 
       if (!parsed.courseId || !parsed.title) {
         res.status(400).json({ error: 'Course and lecture title are required' });
+        return;
+      }
+      const course = db.courses.find((c) => c.id === parsed.courseId);
+      if (!canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to add lessons to this course.' });
         return;
       }
 
@@ -1491,6 +2147,7 @@ async function startServer() {
         orderIndex: existingCount + 1,
       };
       db.lessons.push(lesson);
+      recordAuditLog(db, actor, 'CURRICULUM_UPDATE', course?.title ?? parsed.courseId, `Added lesson "${lesson.title}"`);
       saveDb(db);
       res.status(201).json({ lesson });
     }
@@ -1503,12 +2160,18 @@ async function startServer() {
     requireRole(['admin', 'teacher']),
     (req: AuthedRequest, res) => {
       const db = getDb();
+      const actor = req.authUser!;
       const idx = db.lessons.findIndex((l) => l.id === req.params.id);
       if (idx === -1) {
         res.status(404).json({ error: 'Lesson not found' });
         return;
       }
       const existing = db.lessons[idx];
+      const course = db.courses.find((c) => c.id === existing.courseId);
+      if (!canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to edit lessons in this course.' });
+        return;
+      }
       const parsed = parseLessonPayload((req.body ?? {}) as Record<string, unknown>, db, existing);
       if (!parsed.title) {
         res.status(400).json({ error: 'Lecture title is required' });
@@ -1529,11 +2192,17 @@ async function startServer() {
     '/api/portal/lessons/:id/live-status',
     requireAuth,
     requireRole(['admin', 'teacher']),
-    (req, res) => {
+    (req: AuthedRequest, res) => {
       const db = getDb();
+      const actor = req.authUser!;
       const lesson = db.lessons.find((l) => l.id === req.params.id);
       if (!lesson) {
         res.status(404).json({ error: 'Lesson not found' });
+        return;
+      }
+      const course = db.courses.find((c) => c.id === lesson.courseId);
+      if (!canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to manage this lesson.' });
         return;
       }
       const nextStatus = req.body?.liveStatus;
@@ -1556,11 +2225,17 @@ async function startServer() {
     '/api/portal/lessons/:id/reorder',
     requireAuth,
     requireRole(['admin', 'teacher']),
-    (req, res) => {
+    (req: AuthedRequest, res) => {
       const db = getDb();
+      const actor = req.authUser!;
       const target = db.lessons.find((l) => l.id === req.params.id);
       if (!target) {
         res.status(404).json({ error: 'Lesson not found' });
+        return;
+      }
+      const course = db.courses.find((c) => c.id === target.courseId);
+      if (!canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to reorder lessons in this course.' });
         return;
       }
       const dir = req.body?.direction === 'up' ? -1 : 1;
@@ -1587,11 +2262,17 @@ async function startServer() {
     '/api/portal/lessons/:id/duplicate',
     requireAuth,
     requireRole(['admin', 'teacher']),
-    (req, res) => {
+    (req: AuthedRequest, res) => {
       const db = getDb();
+      const actor = req.authUser!;
       const source = db.lessons.find((l) => l.id === req.params.id);
       if (!source) {
         res.status(404).json({ error: 'Lesson not found' });
+        return;
+      }
+      const course = db.courses.find((c) => c.id === source.courseId);
+      if (!canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to duplicate lessons in this course.' });
         return;
       }
       const existingCount = db.lessons.filter((l) => l.courseId === source.courseId).length;
@@ -1615,9 +2296,16 @@ async function startServer() {
     requireRole(['admin', 'teacher']),
     (req: AuthedRequest, res) => {
       const db = getDb();
+      const actor = req.authUser!;
       const idx = db.lessons.findIndex((l) => l.id === req.params.id);
       if (idx === -1) {
         res.status(404).json({ error: 'Lesson not found' });
+        return;
+      }
+      const existing = db.lessons[idx];
+      const course = db.courses.find((c) => c.id === existing.courseId);
+      if (!canTeacherManageCourse(actor, course, db.instructors, db.batches)) {
+        res.status(403).json({ error: 'You are not assigned to delete lessons in this course.' });
         return;
       }
       const [removed] = db.lessons.splice(idx, 1);
@@ -1632,13 +2320,11 @@ async function startServer() {
         entityType: 'lesson',
         originalId: removed.id,
         label: removed.title,
-        deletedBy: req.authUser?.name ?? 'Admin',
+        deletedBy: actor.name,
         deletedAt: new Date().toISOString(),
         snapshot: removed,
       });
-      if (req.authUser) {
-        recordAuditLog(db, req.authUser, 'LESSON_DELETE', removed.title, 'Moved to Recycle Bin');
-      }
+      recordAuditLog(db, actor, 'LESSON_DELETE', removed.title, 'Moved to Recycle Bin');
       saveDb(db);
       res.json({ ok: true, deletedId: removed.id });
     }
@@ -1688,6 +2374,105 @@ async function startServer() {
       db.exams.unshift(exam);
       saveDb(db);
       res.status(201).json({ exam });
+    }
+  );
+
+  // Teacher & Admin: Inspect Exam Submissions + Override/Grade Score & Feedback
+  app.get(
+    '/api/portal/exams/:id/attempts',
+    requireAuth,
+    requireRole(['admin', 'teacher']),
+    (req, res) => {
+      const db = getDb();
+      const attempts = db.examAttempts
+        .filter((a) => a.examId === req.params.id)
+        .sort((a, b) => (b.submittedAt > a.submittedAt ? 1 : -1));
+      res.json({ attempts });
+    }
+  );
+
+  app.patch(
+    '/api/portal/exam-attempts/:id/grade',
+    requireAuth,
+    requireRole(['admin', 'teacher']),
+    (req: AuthedRequest, res) => {
+      const db = getDb();
+      const attempt = db.examAttempts.find((a) => a.id === req.params.id);
+      if (!attempt) {
+        res.status(404).json({ error: 'Exam attempt not found' });
+        return;
+      }
+      const exam = db.exams.find((e) => e.id === attempt.examId);
+      const nextScore = Number(req.body?.score ?? attempt.score);
+      const feedbackText = String(req.body?.teacherFeedback ?? attempt.teacherFeedback ?? '')
+        .trim()
+        .slice(0, 500);
+      const recalculated = recalculateExamAttemptGrade(
+        nextScore,
+        attempt.totalMarks,
+        exam?.passPercentage ?? 40
+      );
+      attempt.score = recalculated.score;
+      attempt.percentage = recalculated.percentage;
+      attempt.grade = recalculated.grade;
+      attempt.passed = recalculated.passed;
+      attempt.teacherFeedback = feedbackText || undefined;
+      attempt.gradedBy = req.authUser!.name;
+      attempt.gradedAt = new Date().toISOString();
+
+      recordAuditLog(
+        db,
+        req.authUser!,
+        'EXAM_GRADE_UPDATE',
+        `${attempt.studentName} · ${attempt.examTitle}`,
+        `Score ${attempt.score}/${attempt.totalMarks} (${attempt.grade})`
+      );
+      saveDb(db);
+      res.json({ attempt });
+    }
+  );
+
+  // Teacher & Admin: Award Bonus XP & Coaching Feedback to a Student
+  app.post(
+    '/api/portal/teacher/award-xp',
+    requireAuth,
+    requireRole(['admin', 'teacher']),
+    (req: AuthedRequest, res) => {
+      const studentId = String(req.body?.studentId ?? '').trim();
+      const xpDelta = Math.min(200, Math.max(5, Math.round(Number(req.body?.xpDelta) || 25)));
+      const reason = String(req.body?.reason ?? 'Excellent class participation').trim().slice(0, 140);
+      const db = getDb();
+      const student = db.users.find((u) => u.id === studentId && u.role === 'student');
+      if (!student) {
+        res.status(404).json({ error: 'Student not found' });
+        return;
+      }
+      const existing = db.rewardsByUser[student.id] ?? {
+        userId: student.id,
+        studentName: student.name,
+        branchId: student.branchId,
+        xp: 0,
+        streakDays: 1,
+        badges: ['Active Learner'],
+        showOnLeaderboard: true,
+        completedScormIds: [],
+        updatedAt: new Date().toISOString(),
+      };
+      existing.xp += xpDelta;
+      existing.updatedAt = new Date().toISOString();
+      if (existing.xp >= 500 && !existing.badges.includes('Faculty Star')) {
+        existing.badges.push('Faculty Star');
+      }
+      db.rewardsByUser[student.id] = existing;
+      recordAuditLog(
+        db,
+        req.authUser!,
+        'TEACHER_AWARD_XP',
+        student.name,
+        `+${xpDelta} XP · ${reason}`
+      );
+      saveDb(db);
+      res.json({ rewards: existing });
     }
   );
 
@@ -1810,7 +2595,7 @@ async function startServer() {
     res.json({ deletedId: removed.id, branches: db.branches });
   });
 
-  // Admin & Branch Manager: Create, Update, Approve/Reject & Delete Enrollments
+  // Admin & Branch Manager: Create, Update, Approve/Reject & Delete Enrollments (with Batch Seat & Duplicate Guards)
   app.post(
     '/api/portal/enrollments',
     requireAuth,
@@ -1821,13 +2606,15 @@ async function startServer() {
       const studentName = String(b.studentName ?? '').trim();
       const studentEmail = String(b.studentEmail ?? '').trim().toLowerCase();
       const courseId = String(b.courseId ?? '').trim();
+      const batchId = b.batchId ? String(b.batchId).trim() : null;
       const requestedBranchId = String(b.branchId ?? '').trim();
       const paymentMethod = String(b.paymentMethod ?? 'Branch Cash').trim();
       const amountPaid = Math.max(0, Number(b.amountPaid) || 0);
       const trxId = String(b.trxId ?? '').trim();
+      const expiresAt = b.expiresAt ? String(b.expiresAt).trim() : null;
       const status = (
         ['approved', 'pending', 'rejected'].includes(b.status) ? b.status : 'pending'
-      ) as 'approved' | 'pending' | 'rejected';
+      ) as Enrollment['status'];
 
       if (!studentName || !studentEmail || !courseId) {
         res.status(400).json({ error: 'Student name, email, and course are required.' });
@@ -1841,11 +2628,42 @@ async function startServer() {
         return;
       }
 
+      const matchedUser =
+        (b.userId ? db.users.find((u) => u.id === String(b.userId)) : undefined) ??
+        db.users.find((u) => u.email.toLowerCase() === studentEmail);
+      const userId = matchedUser?.id ?? `u-walkin-${Date.now()}`;
+
+      // Duplicate active/pending check
+      const dup = db.enrollments.find(
+        (e) =>
+          (e.userId === userId || e.studentEmail.toLowerCase() === studentEmail) &&
+          e.courseId === course.id &&
+          (e.status === 'approved' || e.status === 'pending')
+      );
+      if (dup) {
+        res.status(409).json({
+          error: `Duplicate guard: ${studentName} already has a ${dup.status} enrollment in "${course.title}".`,
+        });
+        return;
+      }
+
+      const targetBatch = batchId
+        ? db.batches.find((bat) => bat.id === batchId && bat.courseId === course.id)
+        : undefined;
+      if (batchId && !targetBatch) {
+        res.status(400).json({ error: 'Selected batch does not belong to this course.' });
+        return;
+      }
+      if (targetBatch && status === 'approved' && computeBatchSeatUsage(targetBatch).isFull) {
+        res.status(409).json({ error: `Batch "${targetBatch.name}" is already at full capacity.` });
+        return;
+      }
+
       const activeFallback = db.branches.find((br) => br.status === 'active')?.id ?? 'online';
       const resolvedBranchId =
         user.role === 'branch_manager' && user.branchId
           ? user.branchId
-          : requestedBranchId || activeFallback;
+          : targetBatch?.branchId || requestedBranchId || activeFallback;
 
       if (user.role === 'admin' && resolvedBranchId !== 'online') {
         const matchedBranch = db.branches.find((br) => br.id === resolvedBranchId);
@@ -1855,10 +2673,6 @@ async function startServer() {
         }
       }
 
-      const matchedUser =
-        (b.userId ? db.users.find((u) => u.id === String(b.userId)) : undefined) ??
-        db.users.find((u) => u.email.toLowerCase() === studentEmail);
-      const userId = matchedUser?.id ?? `u-walkin-${Date.now()}`;
       const invoiceNo = `INV-AEC-${Math.floor(100000 + Math.random() * 900000)}`;
 
       const enrollment: Enrollment = {
@@ -1868,6 +2682,8 @@ async function startServer() {
         studentEmail,
         courseId: course.id,
         courseTitle: course.title,
+        batchId: targetBatch?.id ?? null,
+        batchName: targetBatch?.name,
         branchId: resolvedBranchId,
         paymentMethod: paymentMethod as Enrollment['paymentMethod'],
         trxId: trxId || (paymentMethod === 'Branch Cash' ? `CASH-${Date.now().toString().slice(-4)}` : undefined),
@@ -1875,12 +2691,23 @@ async function startServer() {
         amountPaid,
         status,
         completedLessonIds: [],
+        expiresAt,
+        history: [
+          {
+            id: `eh-${Date.now()}`,
+            action: 'created',
+            note: `Manual enrollment by ${user.name} (${status})${targetBatch ? ` · ${targetBatch.name}` : ''}`,
+            actorName: user.name,
+            createdAt: new Date().toISOString(),
+          },
+        ],
         enrolledAt: new Date().toISOString(),
       };
 
       db.enrollments.unshift(enrollment);
       if (status === 'approved') {
         course.enrolledCount += 1;
+        if (targetBatch) targetBatch.enrolledSeats += 1;
       }
 
       db.transactions.unshift({
@@ -1945,7 +2772,9 @@ async function startServer() {
 
       const b = req.body ?? {};
       const nextStatus = (
-        ['approved', 'pending', 'rejected'].includes(b.status) ? b.status : enrollment.status
+        ['approved', 'pending', 'rejected', 'cancelled', 'expired'].includes(b.status)
+          ? b.status
+          : enrollment.status
       ) as Enrollment['status'];
       const nextCourseId = b.courseId ? String(b.courseId) : enrollment.courseId;
       const nextCourse = db.courses.find((c) => c.id === nextCourseId);
@@ -1954,14 +2783,41 @@ async function startServer() {
         return;
       }
 
+      const nextBatchId = b.batchId !== undefined
+        ? (b.batchId ? String(b.batchId).trim() : null)
+        : enrollment.batchId ?? null;
+      const nextBatch = nextBatchId
+        ? db.batches.find((bat) => bat.id === nextBatchId && bat.courseId === nextCourse.id)
+        : undefined;
+      if (nextBatchId && !nextBatch) {
+        res.status(400).json({ error: 'Selected batch does not belong to this course.' });
+        return;
+      }
+
       const prevCourseId = enrollment.courseId;
+      const prevBatchId = enrollment.batchId ?? null;
       const prevStatus = enrollment.status;
+
+      const becomingApprovedOrChangingBatch =
+        nextStatus === 'approved' && (prevStatus !== 'approved' || prevBatchId !== (nextBatch?.id ?? null));
+      if (becomingApprovedOrChangingBatch && nextBatch && computeBatchSeatUsage(nextBatch).isFull) {
+        res.status(409).json({ error: `Batch "${nextBatch.name}" is already full.` });
+        return;
+      }
+
       if (prevStatus === 'approved' && (nextStatus !== 'approved' || prevCourseId !== nextCourseId)) {
         const prevCourse = db.courses.find((c) => c.id === prevCourseId);
         if (prevCourse) prevCourse.enrolledCount = Math.max(0, prevCourse.enrolledCount - 1);
       }
+      if (prevStatus === 'approved' && prevBatchId && (nextStatus !== 'approved' || prevBatchId !== (nextBatch?.id ?? null))) {
+        const prevBatch = db.batches.find((bat) => bat.id === prevBatchId);
+        if (prevBatch) prevBatch.enrolledSeats = Math.max(0, prevBatch.enrolledSeats - 1);
+      }
       if (nextStatus === 'approved' && (prevStatus !== 'approved' || prevCourseId !== nextCourseId)) {
         nextCourse.enrolledCount += 1;
+      }
+      if (becomingApprovedOrChangingBatch && nextBatch) {
+        nextBatch.enrolledSeats += 1;
       }
 
       enrollment.studentName = String(b.studentName ?? enrollment.studentName).trim() || enrollment.studentName;
@@ -1969,6 +2825,11 @@ async function startServer() {
         String(b.studentEmail ?? enrollment.studentEmail).trim().toLowerCase() || enrollment.studentEmail;
       enrollment.courseId = nextCourse.id;
       enrollment.courseTitle = nextCourse.title;
+      enrollment.batchId = nextBatch?.id ?? null;
+      enrollment.batchName = nextBatch?.name;
+      if (b.expiresAt !== undefined) {
+        enrollment.expiresAt = b.expiresAt ? String(b.expiresAt).trim() : null;
+      }
       if (user.role === 'admin' && b.branchId) {
         enrollment.branchId = String(b.branchId);
       }
@@ -1982,6 +2843,16 @@ async function startServer() {
         enrollment.trxId = String(b.trxId).trim() || undefined;
       }
       enrollment.status = nextStatus;
+      enrollment.history = [
+        {
+          id: `eh-${Date.now()}`,
+          action: 'updated',
+          note: `Updated by ${user.name} · Status: ${nextStatus}${nextBatch ? ` · ${nextBatch.name}` : ''}`,
+          actorName: user.name,
+          createdAt: new Date().toISOString(),
+        },
+        ...(enrollment.history ?? []),
+      ];
 
       const linkedTxn = db.transactions.find(
         (t) => t.referenceType === 'course' && t.referenceId === enrollment.id
@@ -2017,8 +2888,8 @@ async function startServer() {
     requireRole(['admin', 'branch_manager']),
     (req: AuthedRequest, res) => {
       const user = req.authUser!;
-      const status = req.body?.status as 'approved' | 'pending' | 'rejected';
-      if (!['approved', 'pending', 'rejected'].includes(status)) {
+      const status = req.body?.status as Enrollment['status'];
+      if (!['approved', 'pending', 'rejected', 'cancelled', 'expired'].includes(status)) {
         res.status(400).json({ error: 'Invalid status' });
         return;
       }
@@ -2036,15 +2907,34 @@ async function startServer() {
       }
 
       const prevStatus = enrollment.status;
+      const batch = enrollment.batchId
+        ? db.batches.find((bat) => bat.id === enrollment.batchId)
+        : undefined;
+      if (prevStatus !== 'approved' && status === 'approved' && batch && computeBatchSeatUsage(batch).isFull) {
+        res.status(409).json({ error: `Cannot approve: Batch "${batch.name}" is already at full capacity.` });
+        return;
+      }
+
       enrollment.status = status;
       const course = db.courses.find((c) => c.id === enrollment.courseId);
-      if (course) {
-        if (prevStatus !== 'approved' && status === 'approved') {
-          course.enrolledCount += 1;
-        } else if (prevStatus === 'approved' && status !== 'approved') {
-          course.enrolledCount = Math.max(0, course.enrolledCount - 1);
-        }
+      if (prevStatus !== 'approved' && status === 'approved') {
+        if (course) course.enrolledCount += 1;
+        if (batch) batch.enrolledSeats += 1;
+      } else if (prevStatus === 'approved' && status !== 'approved') {
+        if (course) course.enrolledCount = Math.max(0, course.enrolledCount - 1);
+        if (batch) batch.enrolledSeats = Math.max(0, batch.enrolledSeats - 1);
       }
+
+      enrollment.history = [
+        {
+          id: `eh-${Date.now()}`,
+          action: status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'updated',
+          note: `Status changed ${prevStatus} -> ${status}`,
+          actorName: user.name,
+          createdAt: new Date().toISOString(),
+        },
+        ...(enrollment.history ?? []),
+      ];
 
       const linkedTxn = db.transactions.find(
         (t) => t.referenceType === 'course' && t.referenceId === enrollment.id
@@ -2092,6 +2982,10 @@ async function startServer() {
       if (removed.status === 'approved') {
         const course = db.courses.find((c) => c.id === removed.courseId);
         if (course) course.enrolledCount = Math.max(0, course.enrolledCount - 1);
+        if (removed.batchId) {
+          const batch = db.batches.find((bat) => bat.id === removed.batchId);
+          if (batch) batch.enrolledSeats = Math.max(0, batch.enrolledSeats - 1);
+        }
       }
       db.recycleBin.unshift({
         id: `bin-${Date.now()}`,
@@ -2145,18 +3039,33 @@ async function startServer() {
     }
   );
 
-  // Admin: Create User with any role or update user role/branch/guardian link
-  app.post('/api/portal/users', requireAuth, requireRole(['admin']), (req, res) => {
+  // Admin & Branch Manager: Full User Management CRUD + 360 User Inspector
+  app.post('/api/portal/users', requireAuth, requireRole(['admin', 'branch_manager']), (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
     const name = String(req.body?.name ?? '').trim();
     const email = String(req.body?.email ?? '').trim().toLowerCase();
     const phone = String(req.body?.phone ?? '').trim();
-    const password = String(req.body?.password ?? 'Aloms@2026');
+    const password = String(req.body?.password ?? 'Aloms@2026').trim() || 'Aloms@2026';
     const role = req.body?.role;
-    const branchId = req.body?.branchId ? String(req.body.branchId) : null;
-    const linkedStudentId = req.body?.linkedStudentId ? String(req.body.linkedStudentId) : null;
+    const requestedBranchId = req.body?.branchId ? String(req.body.branchId) : null;
+    const branchId = actor.role === 'branch_manager' ? (actor.branchId ?? requestedBranchId) : requestedBranchId;
+    const status = req.body?.status === 'suspended' ? 'suspended' : 'active';
+    const bio = req.body?.bio ? String(req.body.bio).trim().slice(0, 300) : undefined;
+    const subjectSpecialty = req.body?.subjectSpecialty
+      ? String(req.body.subjectSpecialty).trim().slice(0, 120)
+      : undefined;
+    const linkedIds = Array.isArray(req.body?.guardianLinkedStudentIds)
+      ? req.body.guardianLinkedStudentIds.map(String)
+      : req.body?.linkedStudentId
+        ? [String(req.body.linkedStudentId)]
+        : undefined;
 
     if (!name || !email || !isValidRole(role)) {
       res.status(400).json({ error: 'Name, email, and valid role are required' });
+      return;
+    }
+    if (actor.role === 'branch_manager' && (role === 'admin' || role === 'branch_manager')) {
+      res.status(403).json({ error: 'Branch managers can only create student, teacher, or guardian accounts' });
       return;
     }
 
@@ -2166,6 +3075,7 @@ async function startServer() {
       return;
     }
 
+    const customRoll = String(req.body?.rollNumber ?? '').trim();
     const newUser: StoredUser = {
       id: `u-${Date.now()}`,
       name,
@@ -2173,34 +3083,139 @@ async function startServer() {
       phone: phone || '01700000000',
       role,
       branchId,
-      rollNumber: role === 'student' ? `AEC-2026-${100 + db.users.length + 1}` : undefined,
-      guardianLinkedStudentIds: role === 'guardian' && linkedStudentId ? [linkedStudentId] : undefined,
+      status,
+      bio,
+      subjectSpecialty,
+      rollNumber: role === 'student' ? customRoll || `AEC-2026-${100 + db.users.length + 1}` : undefined,
+      guardianLinkedStudentIds: role === 'guardian' ? linkedIds : undefined,
       passwordHash: hashPassword(password),
       createdAt: new Date().toISOString(),
     };
     db.users.push(newUser);
+    recordAuditLog(db, actor, 'USER_CREATE', `${newUser.name} (${newUser.role})`, maskEmailForAudit(newUser.email));
     saveDb(db);
     res.status(201).json({ user: sanitizeUser(newUser) });
   });
 
-  app.patch('/api/portal/users/:id', requireAuth, requireRole(['admin']), (req, res) => {
+  app.patch('/api/portal/users/:id', requireAuth, requireRole(['admin', 'branch_manager']), (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
     const db = getDb();
     const target = db.users.find((u) => u.id === req.params.id);
     if (!target) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
+    if (actor.role === 'branch_manager') {
+      if (target.role === 'admin' || target.role === 'branch_manager') {
+        res.status(403).json({ error: 'Branch managers cannot modify admin or manager accounts' });
+        return;
+      }
+      if (actor.branchId && target.branchId && target.branchId !== actor.branchId) {
+        res.status(403).json({ error: 'Branch managers can only manage users in their own branch' });
+        return;
+      }
+      if (req.body?.role && (req.body.role === 'admin' || req.body.role === 'branch_manager')) {
+        res.status(403).json({ error: 'Branch managers cannot assign admin or branch manager roles' });
+        return;
+      }
+    }
+
+    if (typeof req.body?.name === 'string' && req.body.name.trim()) {
+      target.name = req.body.name.trim().slice(0, 120);
+    }
+    if (typeof req.body?.email === 'string' && req.body.email.trim()) {
+      const nextEmail = req.body.email.trim().toLowerCase();
+      if (nextEmail !== target.email.toLowerCase() && db.users.some((u) => u.email.toLowerCase() === nextEmail)) {
+        res.status(409).json({ error: 'Another user already uses that email' });
+        return;
+      }
+      target.email = nextEmail;
+    }
+    if (typeof req.body?.phone === 'string') {
+      target.phone = req.body.phone.trim() || target.phone;
+    }
     if (req.body?.role && isValidRole(req.body.role)) {
+      if (target.id === actor.id && req.body.role !== actor.role) {
+        res.status(400).json({ error: 'You cannot change your own role while signed in' });
+        return;
+      }
       target.role = req.body.role;
     }
-    if (req.body?.branchId !== undefined) {
+    if (req.body?.branchId !== undefined && actor.role === 'admin') {
       target.branchId = req.body.branchId ? String(req.body.branchId) : null;
+    }
+    if (req.body?.status === 'active' || req.body?.status === 'suspended') {
+      if (target.id === actor.id && req.body.status === 'suspended') {
+        res.status(400).json({ error: 'You cannot suspend your own active account' });
+        return;
+      }
+      target.status = req.body.status;
+    }
+    if (typeof req.body?.rollNumber === 'string') {
+      target.rollNumber = req.body.rollNumber.trim() || target.rollNumber;
+    }
+    if (req.body?.bio !== undefined) {
+      target.bio = String(req.body.bio).trim().slice(0, 300) || undefined;
+    }
+    if (req.body?.subjectSpecialty !== undefined) {
+      target.subjectSpecialty = String(req.body.subjectSpecialty).trim().slice(0, 120) || undefined;
     }
     if (Array.isArray(req.body?.guardianLinkedStudentIds)) {
       target.guardianLinkedStudentIds = req.body.guardianLinkedStudentIds.map(String);
     }
+    if (typeof req.body?.password === 'string' && req.body.password.trim().length >= 6) {
+      target.passwordHash = hashPassword(req.body.password.trim());
+    }
+
+    recordAuditLog(
+      db,
+      actor,
+      'USER_UPDATE',
+      `${target.name} (${target.role})`,
+      `Status: ${target.status ?? 'active'}`
+    );
     saveDb(db);
     res.json({ user: sanitizeUser(target) });
+  });
+
+  app.delete('/api/portal/users/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
+    if (req.params.id === actor.id) {
+      res.status(400).json({ error: 'Cannot delete the currently logged-in admin account' });
+      return;
+    }
+    const db = getDb();
+    const idx = db.users.findIndex((u) => u.id === req.params.id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    const [removed] = db.users.splice(idx, 1);
+    recordAuditLog(db, actor, 'USER_DELETE', `${removed.name} (${removed.role})`, maskEmailForAudit(removed.email), 'warning');
+    saveDb(db);
+    res.json({ ok: true, deletedId: removed.id });
+  });
+
+  app.get('/api/portal/users/:id/details', requireAuth, requireRole(['admin', 'branch_manager', 'teacher']), (req: AuthedRequest, res) => {
+    const db = getDb();
+    const target = db.users.find((u) => u.id === req.params.id);
+    if (!target) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    const enrollments = db.enrollments.filter((e) => e.userId === target.id);
+    const examAttempts = db.examAttempts.filter((a) => a.userId === target.id);
+    const orders = db.orders.filter((o) => o.userId === target.id);
+    const attendance = db.attendance.filter((a) => a.targetId === target.id);
+    const rewards = db.rewardsByUser[target.id] ?? null;
+    res.json({
+      user: sanitizeUser(target),
+      enrollments,
+      examAttempts,
+      orders,
+      attendance,
+      rewards,
+    });
   });
 
   app.patch('/api/portal/settings', requireAuth, requireRole(['admin']), (req, res) => {
@@ -2507,8 +3522,9 @@ async function startServer() {
     res.download(zipPath, 'aloms-english-center-laravel.zip');
   });
 
-  // Mount AI Agents & Full-Platform Operations Routers
+  // Mount AI Agents, Enterprise Course Management & Full-Platform Operations Routers
   app.use('/api/ai', createAiRouter(getBearerUser));
+  app.use(createCourseEnterpriseRouter(requireAuth, requireRole));
   app.use(createPlatformRouter(requireAuth, requireRole));
 
   // Vite middleware in dev, dist static in production

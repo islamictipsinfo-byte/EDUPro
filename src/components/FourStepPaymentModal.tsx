@@ -12,11 +12,12 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
+  computeBatchSeatUsage,
   filterActiveBranches,
   filterActivePaymentGateways,
   resolveDefaultActiveBranchId,
 } from '../lib/domain';
-import type { Branch, PaymentGatewayType, PaymentTransaction } from '../types';
+import type { Branch, CourseBatch, PaymentGatewayType, PaymentTransaction } from '../types';
 
 interface FourStepPaymentModalProps {
   open: boolean;
@@ -31,6 +32,8 @@ interface FourStepPaymentModalProps {
   ebookId?: string;
   branchId?: string;
   branches?: Branch[];
+  batches?: CourseBatch[];
+  selectedBatchId?: string;
   orderItems?: { productId: string; quantity: number }[];
   deliveryMode?: 'home' | 'branch_pickup';
   deliveryAddress?: string;
@@ -67,6 +70,8 @@ export function FourStepPaymentModal({
   ebookId,
   branchId,
   branches = [],
+  batches = [],
+  selectedBatchId = '',
   orderItems,
   deliveryMode,
   deliveryAddress,
@@ -80,6 +85,12 @@ export function FourStepPaymentModal({
     return filterActiveBranches(source);
   }, [branches, bootstrap?.branches]);
 
+  const courseBatches = useMemo(() => {
+    if (referenceType !== 'course' || !courseId) return [];
+    const source = batches.length > 0 ? batches : (bootstrap?.batches ?? []);
+    return source.filter((b) => b.courseId === courseId);
+  }, [batches, bootstrap?.batches, referenceType, courseId]);
+
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [couponInput, setCouponInput] = useState(initialCouponCode);
   const [appliedCoupon, setAppliedCoupon] = useState(initialCouponCode);
@@ -88,6 +99,7 @@ export function FourStepPaymentModal({
   const [selectedBranch, setSelectedBranch] = useState(() =>
     resolveDefaultActiveBranchId(activeBranches, branchId)
   );
+  const [selectedBatch, setSelectedBatch] = useState(selectedBatchId);
 
   const activeGateways = useMemo(() => {
     const liveList = filterActivePaymentGateways(bootstrap?.paymentGateways);
@@ -146,8 +158,16 @@ export function FourStepPaymentModal({
       setAppliedCoupon(initialCouponCode);
       setDiscountAmount(initialDiscount);
       setTrxId(`AEC${Date.now().toString().slice(-6)}`);
+      if (selectedBatchId) {
+        setSelectedBatch(selectedBatchId);
+      } else {
+        const firstOpen = courseBatches.find(
+          (b) => b.status !== 'closed' && !computeBatchSeatUsage(b).isFull
+        );
+        setSelectedBatch(firstOpen?.id || '');
+      }
     }
-  }, [open, initialCouponCode, initialDiscount]);
+  }, [open, initialCouponCode, initialDiscount, selectedBatchId, courseBatches]);
 
   useEffect(() => {
     const resolved = resolveDefaultActiveBranchId(activeBranches, branchId);
@@ -230,6 +250,7 @@ export function FourStepPaymentModal({
           referenceType,
           courseId,
           ebookId,
+          batchId: referenceType === 'course' && selectedBatch ? selectedBatch : undefined,
           branchId: effectiveBranchId,
           items: orderItems,
           deliveryMode,
@@ -239,7 +260,12 @@ export function FourStepPaymentModal({
           couponCode: appliedCoupon,
           gateway,
           walletOrLast4: walletOrLast4.trim(),
-          trxId: isCash ? 'CASH-DESK' : trxId.trim(),
+          trxId:
+            netPayable === 0
+              ? `FREE-${Date.now().toString().slice(-6)}`
+              : isCash
+                ? 'CASH-DESK'
+                : trxId.trim(),
         }),
       });
       setReceipt(res.transaction);
@@ -309,30 +335,65 @@ export function FourStepPaymentModal({
                 </p>
                 <h3 className="mt-1 text-lg font-extrabold text-slate-900">{itemTitle}</h3>
                 {referenceType === 'course' && (
-                  <div className="mt-3">
-                    <label
-                      htmlFor="pay-branch"
-                      className="mb-1 block text-xs font-semibold text-slate-700"
-                    >
-                      Active Campus / Branch
-                    </label>
-                    {activeBranches.length > 0 ? (
-                      <select
-                        id="pay-branch"
-                        value={selectedBranch}
-                        onChange={(e) => setSelectedBranch(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label
+                        htmlFor="pay-branch"
+                        className="mb-1 block text-xs font-semibold text-slate-700"
                       >
-                        {activeBranches.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                        Online / Virtual Campus Only — all physical campus desks are currently inactive.
-                      </p>
+                        Active Campus / Branch
+                      </label>
+                      {activeBranches.length > 0 ? (
+                        <select
+                          id="pay-branch"
+                          value={selectedBranch}
+                          onChange={(e) => setSelectedBranch(e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                        >
+                          {activeBranches.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                          Online / Virtual Campus Only — all physical campus desks are currently inactive.
+                        </p>
+                      )}
+                    </div>
+
+                    {courseBatches.length > 0 && (
+                      <div>
+                        <label
+                          htmlFor="pay-batch"
+                          className="mb-1 block text-xs font-semibold text-slate-700"
+                        >
+                          Select Batch &amp; Schedule
+                        </label>
+                        <select
+                          id="pay-batch"
+                          value={selectedBatch}
+                          onChange={(e) => setSelectedBatch(e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                        >
+                          <option value="">-- Flexible / Default Batch --</option>
+                          {courseBatches.map((bat) => {
+                            const usage = computeBatchSeatUsage(bat);
+                            const unavailable = bat.status === 'closed' || usage.isFull;
+                            return (
+                              <option key={bat.id} value={bat.id} disabled={unavailable}>
+                                {bat.name} ({bat.schedule}) —{' '}
+                                {bat.status === 'closed'
+                                  ? 'Closed'
+                                  : usage.isFull
+                                    ? 'Seat Full'
+                                    : `${usage.remainingSeats} seats left`}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
                     )}
                   </div>
                 )}
@@ -482,7 +543,7 @@ export function FourStepPaymentModal({
                 />
               </div>
 
-              {!isCash && (
+              {!isCash && netPayable > 0 && (
                 <div>
                   <label
                     htmlFor="pay-trxid"

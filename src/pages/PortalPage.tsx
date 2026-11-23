@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   LogOut,
+  Megaphone,
   Package,
   Pencil,
   Play,
@@ -43,8 +44,11 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { AdminBatchModal } from '../components/AdminBatchModal';
-import { AdminCourseModal } from '../components/AdminCourseModal';
 import { AdminLessonModal } from '../components/AdminLessonModal';
+import { CertificateModal } from '../components/courses/CertificateModal';
+import { CourseEnterpriseDashboard } from '../components/courses/CourseEnterpriseDashboard';
+import { CourseWizardModal } from '../components/courses/CourseWizardModal';
+import { CurriculumBuilderModal } from '../components/courses/CurriculumBuilderModal';
 import { DashboardCustomizerModal } from '../components/dashboard/DashboardCustomizerModal';
 import { DashboardOverview } from '../components/dashboard/DashboardOverview';
 import {
@@ -56,6 +60,12 @@ import { DashboardTopbar } from '../components/dashboard/DashboardTopbar';
 import { type QuickActionType } from '../components/dashboard/DashboardWidgets';
 import { EnrollmentsFeePanel } from '../components/dashboard/EnrollmentsFeePanel';
 import { SystemActivityLogsPanel } from '../components/dashboard/SystemActivityLogsPanel';
+import {
+  ExamSubmissionsModal,
+  TeacherRosterPanel,
+} from '../components/dashboard/TeacherRosterGradingPanel';
+import { UserProfilePanel } from '../components/dashboard/UserProfilePanel';
+import { UsersManagementPanel } from '../components/dashboard/UsersManagementPanel';
 import { HomepageCmsStudio } from '../components/HomepageCmsStudio';
 import { PaymentSystemPanel } from '../components/PaymentSystemPanel';
 import {
@@ -67,8 +77,8 @@ import {
 } from '../components/PortalOpsStudio';
 import { ScormPlayerModal } from '../components/ScormPlayerModal';
 import { useAuth } from '../context/AuthContext';
+import { isCourseStatusLive } from '../lib/courseEnterprise';
 import {
-  calculateDiscountedPrice,
   calculateStudentProgress,
   computeBatchSeatUsage,
   DEFAULT_DASHBOARD_CONFIG,
@@ -79,6 +89,7 @@ import {
 } from '../lib/domain';
 import type {
   ApiPlugin,
+  AssignmentSubmission,
   AttendanceRecord,
   AuditLogEntry,
   Branch,
@@ -87,8 +98,13 @@ import type {
   CommunityPost,
   Coupon,
   Course,
+  CourseAnnouncement,
+  CourseAssignment,
   CourseBatch,
+  CourseCertificate,
+  CourseChapter,
   CourseLesson,
+  CourseModule,
   DashboardCustomizationConfig,
   Ebook,
   Enrollment,
@@ -130,7 +146,14 @@ interface PortalPayload {
   metrics: Record<string, number>;
   courses?: Course[];
   batches?: CourseBatch[];
+  modules?: CourseModule[];
+  chapters?: CourseChapter[];
   lessons?: CourseLesson[];
+  assignments?: CourseAssignment[];
+  assignmentSubmissions?: AssignmentSubmission[];
+  announcements?: CourseAnnouncement[];
+  certificates?: CourseCertificate[];
+  assignedCourseIds?: string[];
   exams?: Exam[];
   examAttempts?: ExamAttempt[];
   branches?: Branch[];
@@ -157,6 +180,7 @@ interface PortalPayload {
   products?: Product[];
   ebooks?: Ebook[];
   rewards?: LearnerRewardProfile | null;
+  rewardsByUser?: Record<string, LearnerRewardProfile>;
   auditLogs?: AuditLogEntry[];
 }
 
@@ -177,6 +201,7 @@ const SECTION_META: Record<PortalSection, { label: string; icon: typeof LayoutDa
   activity_logs: { label: 'System Activity Logs', icon: Activity },
   guardian_monitor: { label: 'Child Progress', icon: GraduationCap },
   my_learning: { label: 'My Courses & Rewards', icon: BookOpen },
+  profile: { label: 'My Profile & Security', icon: UserCheck },
   settings: { label: 'Settings, Backups & Export', icon: Settings },
 };
 
@@ -218,16 +243,33 @@ export function PortalPage({ navigate }: PortalPageProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // Admin / Teacher: Advanced Course & Batch Studio state
-  const [courseSubTab, setCourseSubTab] = useState<'courses' | 'batches'>('courses');
+  const [courseSubTab, setCourseSubTab] = useState<
+    'courses' | 'batches' | 'assignments' | 'announcements' | 'certificates'
+  >('courses');
   const [catalogInitialTab, setCatalogInitialTab] = useState<
     'ebooks' | 'products' | 'instructors' | 'categories' | 'posts' | 'coupons'
   >('ebooks');
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [courseSearch, setCourseSearch] = useState('');
-  const [courseStatusFilter, setCourseStatusFilter] = useState<'all' | 'active' | 'draft'>('all');
-  const [courseCatFilter, setCourseCatFilter] = useState<string>('all');
-  const [confirmCourseDeleteId, setConfirmCourseDeleteId] = useState<string | null>(null);
+  const [wizardTemplateDefaults, setWizardTemplateDefaults] = useState<Partial<Course> | null>(null);
+  const [wizardSampleModules, setWizardSampleModules] = useState<string[] | undefined>(undefined);
+  const [curriculumCourse, setCurriculumCourse] = useState<Course | null>(null);
+  const [previewCert, setPreviewCert] = useState<CourseCertificate | null>(null);
+
+  // Assignments, Grading & Announcements forms
+  const [asgCourseId, setAsgCourseId] = useState('');
+  const [asgBatchId, setAsgBatchId] = useState('');
+  const [asgTitle, setAsgTitle] = useState('');
+  const [asgInstructions, setAsgInstructions] = useState('');
+  const [asgDueDate, setAsgDueDate] = useState('2026-12-31');
+  const [asgMaxMarks, setAsgMaxMarks] = useState('20');
+  const [gradeDrafts, setGradeDrafts] = useState<Record<string, { marks: string; feedback: string }>>({});
+
+  const [annCourseId, setAnnCourseId] = useState('');
+  const [annBatchId, setAnnBatchId] = useState('');
+  const [annTitle, setAnnTitle] = useState('');
+  const [annMessage, setAnnMessage] = useState('');
+  const [annPinned, setAnnPinned] = useState(false);
 
   // Batch Studio state
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -268,12 +310,8 @@ export function PortalPage({ navigate }: PortalPageProps) {
   const [brError, setBrError] = useState<string | null>(null);
   const [confirmBranchDeleteId, setConfirmBranchDeleteId] = useState<string | null>(null);
 
-  // Admin: New User form
-  const [uName, setUName] = useState('');
-  const [uEmail, setUEmail] = useState('');
-  const [uPhone, setUPhone] = useState('');
+  // Quick Action target role for Users Studio
   const [uRole, setURole] = useState<UserRole>('teacher');
-  const [uBranchId, setUBranchId] = useState('br-mirpur');
 
   // Admin: Settings & Menu shortcut state
   const [setPhone, setSetPhone] = useState('');
@@ -281,6 +319,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
   const [setAddress, setSetAddress] = useState('');
   const [activeStudentScorm, setActiveStudentScorm] = useState<ScormPackage | null>(null);
   const [confirmExamDeleteId, setConfirmExamDeleteId] = useState<string | null>(null);
+  const [gradingExam, setGradingExam] = useState<Exam | null>(null);
   const [cmsInitialTab, setCmsInitialTab] = useState<'slides' | 'highlights' | 'stats' | 'reviews' | 'branding'>('slides');
 
   const loadPortal = useCallback(async () => {
@@ -386,13 +425,27 @@ export function PortalPage({ navigate }: PortalPageProps) {
   };
 
   const handleToggleCourseStatus = async (course: Course) => {
-    const nextStatus = course.status === 'active' ? 'draft' : 'active';
+    const nextStatus = isCourseStatusLive(course.status) ? 'unpublished' : 'published';
     await apiFetch(`/api/portal/courses/${course.id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status: nextStatus }),
     });
     await Promise.all([loadPortal(), refreshBootstrap()]);
     notify(`"${course.title}" status updated to ${nextStatus}.`);
+  };
+
+  const handleArchiveToggleCourse = async (course: Course) => {
+    if (course.status === 'archived') {
+      await apiFetch(`/api/portal/courses/${course.id}/restore`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'draft' }),
+      });
+      notify(`Restored "${course.title}" to Draft.`);
+    } else {
+      await apiFetch(`/api/portal/courses/${course.id}/archive`, { method: 'PATCH' });
+      notify(`Archived "${course.title}".`);
+    }
+    await Promise.all([loadPortal(), refreshBootstrap()]);
   };
 
   const handleDuplicateCourse = async (course: Course) => {
@@ -404,14 +457,86 @@ export function PortalPage({ navigate }: PortalPageProps) {
   };
 
   const handleDeleteCourse = async (id: string) => {
-    if (confirmCourseDeleteId !== id) {
-      setConfirmCourseDeleteId(id);
-      return;
-    }
     await apiFetch(`/api/portal/courses/${id}`, { method: 'DELETE' });
-    setConfirmCourseDeleteId(null);
     await Promise.all([loadPortal(), refreshBootstrap()]);
-    notify('Course and its syllabus lessons deleted.');
+    notify('Course and its syllabus lessons moved to Recycle Bin.');
+  };
+
+  const handleCreateAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetCourseId = asgCourseId || data?.courses?.[0]?.id;
+    if (!targetCourseId) return;
+    await apiFetch(`/api/portal/courses/${targetCourseId}/assignments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        batchId: asgBatchId || null,
+        title: asgTitle.trim(),
+        instructions: asgInstructions.trim(),
+        dueDate: asgDueDate,
+        maxMarks: Number(asgMaxMarks) || 20,
+      }),
+    });
+    setAsgTitle('');
+    setAsgInstructions('');
+    await loadPortal();
+    notify('Course assignment created.');
+  };
+
+  const handleDeleteAssignment = async (id: string) => {
+    await apiFetch(`/api/portal/assignments/${id}`, { method: 'DELETE' });
+    await loadPortal();
+    notify('Assignment removed.');
+  };
+
+  const handleGradeSubmission = async (sub: AssignmentSubmission) => {
+    const draft = gradeDrafts[sub.id];
+    const marks = Number(draft?.marks ?? sub.marks ?? 0);
+    const feedback = draft?.feedback ?? sub.feedback ?? '';
+    await apiFetch(`/api/portal/assignment-submissions/${sub.id}/grade`, {
+      method: 'PATCH',
+      body: JSON.stringify({ marks, feedback }),
+    });
+    await loadPortal();
+    notify(`Graded ${sub.studentName}'s submission (${marks} marks).`);
+  };
+
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetCourseId = annCourseId || data?.courses?.[0]?.id;
+    if (!targetCourseId) return;
+    await apiFetch(`/api/portal/courses/${targetCourseId}/announcements`, {
+      method: 'POST',
+      body: JSON.stringify({
+        batchId: annBatchId || null,
+        title: annTitle.trim(),
+        message: annMessage.trim(),
+        pinned: annPinned,
+      }),
+    });
+    setAnnTitle('');
+    setAnnMessage('');
+    setAnnPinned(false);
+    await loadPortal();
+    notify('Course announcement published.');
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    await apiFetch(`/api/portal/announcements/${id}`, { method: 'DELETE' });
+    await loadPortal();
+    notify('Announcement deleted.');
+  };
+
+  const handleToggleRevokeCertificate = async (cert: CourseCertificate) => {
+    await apiFetch(`/api/portal/certificates/${cert.id}/revoke`, {
+      method: 'PATCH',
+      body: JSON.stringify({ revoked: !cert.revoked }),
+    });
+    await loadPortal();
+    notify(
+      cert.revoked
+        ? `Reinstated certificate ${cert.certificateNumber}.`
+        : `Revoked certificate ${cert.certificateNumber}.`
+    );
   };
 
   const handleBatchStatusChange = async (batch: CourseBatch, status: CourseBatch['status']) => {
@@ -594,34 +719,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
     notify(`Branch "${b.name}" moved to Recycle Bin.`);
   };
 
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await apiFetch('/api/portal/users', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: uName,
-        email: uEmail,
-        phone: uPhone,
-        role: uRole,
-        branchId: uRole === 'admin' ? null : uBranchId,
-      }),
-    });
-    setUName('');
-    setUEmail('');
-    setUPhone('');
-    await loadPortal();
-    notify('User created with assigned role.');
-  };
-
-  const handleRoleUpdate = async (userId: string, role: UserRole) => {
-    await apiFetch(`/api/portal/users/${userId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ role }),
-    });
-    await loadPortal();
-    notify('User role updated.');
-  };
-
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     await apiFetch('/api/portal/settings', {
@@ -702,6 +799,8 @@ export function PortalPage({ navigate }: PortalPageProps) {
         break;
       case 'add_course':
         setEditingCourse(null);
+        setWizardTemplateDefaults(null);
+        setWizardSampleModules(undefined);
         setCourseModalOpen(true);
         break;
       case 'add_post':
@@ -819,7 +918,11 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 }`}
               >
                 <div>
-                  <h1 className="text-base font-extrabold">{SECTION_META[currentSection].label}</h1>
+                  <h1 className="text-base font-extrabold">
+                    {currentSection === 'enrollments' && user.role === 'teacher'
+                      ? 'Student Coaching Roster'
+                      : SECTION_META[currentSection].label}
+                  </h1>
                   <p className="text-xs opacity-70">
                     {ROLE_LABELS[user.role]} Workspace · {bootstrap?.settings.brandName || "Alom's English Center"}
                   </p>
@@ -847,6 +950,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 {/* OVERVIEW (Futuristic Alom's English Center LMS Dashboard) */}
                 {currentSection === 'overview' && data && (
                   <DashboardOverview
+                    viewerName={user.name}
                     data={{
                       ...data,
                       instructors: data.instructors ?? bootstrap?.instructors ?? [],
@@ -874,27 +978,16 @@ export function PortalPage({ navigate }: PortalPageProps) {
                   />
                 )}
 
-              {/* COURSES & BATCHES MANAGEMENT (Advanced Studio) */}
+              {/* COURSES & BATCHES MANAGEMENT (Enterprise Course Studio) */}
               {currentSection === 'courses' && data && (() => {
                 const allCourses = data.courses ?? [];
                 const allBatches = data.batches ?? [];
+                const allAssignments = data.assignments ?? [];
+                const allSubmissions = data.assignmentSubmissions ?? [];
+                const allAnnouncements = data.announcements ?? [];
+                const allCertificates = data.certificates ?? [];
                 const branchesList = data.branches ?? bootstrap?.branches ?? [];
                 const instructorsList = bootstrap?.instructors ?? [];
-
-                const q = courseSearch.trim().toLowerCase();
-                const filteredCourses = allCourses.filter((c) => {
-                  if (courseStatusFilter !== 'all' && c.status !== courseStatusFilter) return false;
-                  if (courseCatFilter !== 'all') {
-                    if (courseCatFilter === 'combos' && !c.isCombo) return false;
-                    if (courseCatFilter !== 'combos' && c.category !== courseCatFilter) return false;
-                  }
-                  if (!q) return true;
-                  return (
-                    c.title.toLowerCase().includes(q) ||
-                    c.levelTag.toLowerCase().includes(q) ||
-                    c.category.toLowerCase().includes(q)
-                  );
-                });
 
                 const bq = batchSearch.trim().toLowerCase();
                 const filteredBatches = allBatches.filter((b) => {
@@ -907,9 +1000,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
                   );
                 });
 
-                const activeCount = allCourses.filter((c) => c.status === 'active').length;
-                const draftCount = allCourses.filter((c) => c.status === 'draft').length;
-                const comboCount = allCourses.filter((c) => c.isCombo).length;
                 const openBatchCount = allBatches.filter((b) => b.status === 'open').length;
 
                 return (
@@ -917,30 +1007,32 @@ export function PortalPage({ navigate }: PortalPageProps) {
                     {/* Sub-Tab Bar */}
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setCourseSubTab('courses')}
-                          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-colors ${
-                            courseSubTab === 'courses'
-                              ? 'bg-[#062436] text-white'
-                              : 'text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          <BookOpen className="h-4 w-4" />
-                          <span>Courses & Combos ({allCourses.length})</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCourseSubTab('batches')}
-                          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-colors ${
-                            courseSubTab === 'batches'
-                              ? 'bg-[#062436] text-white'
-                              : 'text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          <Layers className="h-4 w-4" />
-                          <span>Course Batches & Schedules ({allBatches.length})</span>
-                        </button>
+                        {(
+                          [
+                            { id: 'courses', label: `Courses & Analytics (${allCourses.length})`, icon: BookOpen },
+                            { id: 'batches', label: `Batches (${allBatches.length})`, icon: Layers },
+                            { id: 'assignments', label: `Assignments (${allAssignments.length})`, icon: ClipboardList },
+                            { id: 'announcements', label: `Announcements (${allAnnouncements.length})`, icon: Megaphone },
+                            { id: 'certificates', label: `Certificates (${allCertificates.length})`, icon: Award },
+                          ] as const
+                        ).map((tab) => {
+                          const Icon = tab.icon;
+                          return (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setCourseSubTab(tab.id)}
+                              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-colors ${
+                                courseSubTab === tab.id
+                                  ? 'bg-[#062436] text-white'
+                                  : 'text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              <span>{tab.label}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                       <button
                         type="button"
@@ -953,214 +1045,419 @@ export function PortalPage({ navigate }: PortalPageProps) {
                     </div>
 
                     {courseSubTab === 'courses' ? (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <div>
-                            <h2 className="text-lg font-extrabold text-slate-900">
-                              Course & Combo Management Studio
-                            </h2>
-                            <p className="mt-0.5 text-xs text-slate-500">
-                              <span className="font-mono-tabular font-bold text-slate-700">{activeCount}</span> Active ·{' '}
-                              <span className="font-mono-tabular font-bold text-amber-700">{draftCount}</span> Drafts ·{' '}
-                              <span className="font-mono-tabular font-bold text-indigo-700">{comboCount}</span> Combo Bundles
-                            </p>
-                          </div>
-                          {user.role === 'admin' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingCourse(null);
-                                setCourseModalOpen(true);
+                      <CourseEnterpriseDashboard
+                        courses={allCourses}
+                        batches={allBatches}
+                        enrollmentsCount={(data.enrollments ?? []).length}
+                        instructors={instructorsList}
+                        userRole={user.role}
+                        darkMode={darkMode}
+                        onOpenWizard={(courseObj, tplDefaults, sampleMods) => {
+                          setEditingCourse(courseObj);
+                          setWizardTemplateDefaults(tplDefaults ?? null);
+                          setWizardSampleModules(sampleMods);
+                          setCourseModalOpen(true);
+                        }}
+                        onOpenCurriculum={(courseObj) => setCurriculumCourse(courseObj)}
+                        onToggleStatus={handleToggleCourseStatus}
+                        onDuplicateCourse={handleDuplicateCourse}
+                        onArchiveToggle={handleArchiveToggleCourse}
+                        onDeleteCourse={handleDeleteCourse}
+                        onNavigate={navigate}
+                        onRefresh={async () => {
+                          await Promise.all([loadPortal(), refreshBootstrap()]);
+                        }}
+                        onNotify={notify}
+                      />
+                    ) : courseSubTab === 'assignments' ? (
+                      <div className="space-y-6">
+                        <form
+                          onSubmit={handleCreateAssignment}
+                          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-3"
+                        >
+                          <h2 className="text-lg font-extrabold text-slate-900">
+                            Create Course Assignment
+                          </h2>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <select
+                              aria-label="Assignment Course"
+                              value={asgCourseId || allCourses[0]?.id || ''}
+                              onChange={(e) => {
+                                setAsgCourseId(e.target.value);
+                                setAsgBatchId('');
                               }}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
                             >
-                              <Plus className="h-4 w-4" />
-                              <span>Add New Course / Combo</span>
-                            </button>
+                              {allCourses.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.title}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              aria-label="Assignment Batch"
+                              value={asgBatchId}
+                              onChange={(e) => setAsgBatchId(e.target.value)}
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                            >
+                              <option value="">All Batches</option>
+                              {allBatches
+                                .filter((b) => b.courseId === (asgCourseId || allCourses[0]?.id))
+                                .map((b) => (
+                                  <option key={b.id} value={b.id}>
+                                    {b.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <div className="flex gap-2">
+                              <input
+                                type="date"
+                                value={asgDueDate}
+                                onChange={(e) => setAsgDueDate(e.target.value)}
+                                aria-label="Assignment due date"
+                                className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold"
+                              />
+                              <input
+                                type="number"
+                                min={5}
+                                max={200}
+                                value={asgMaxMarks}
+                                onChange={(e) => setAsgMaxMarks(e.target.value)}
+                                aria-label="Maximum marks"
+                                placeholder="Marks"
+                                className="font-mono-tabular w-20 rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold"
+                              />
+                            </div>
+                          </div>
+                          <input
+                            type="text"
+                            required
+                            value={asgTitle}
+                            onChange={(e) => setAsgTitle(e.target.value)}
+                            placeholder="Assignment Title (e.g. IELTS Writing Task 2 — Environment Essay)"
+                            className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm"
+                          />
+                          <textarea
+                            rows={2}
+                            required
+                            value={asgInstructions}
+                            onChange={(e) => setAsgInstructions(e.target.value)}
+                            placeholder="Write clear instructions & rubric..."
+                            className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+                          >
+                            Publish Assignment
+                          </button>
+                        </form>
+
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                            <h3 className="text-base font-extrabold text-slate-900">
+                              Published Assignments ({allAssignments.length})
+                            </h3>
+                            <div className="mt-3 space-y-2.5">
+                              {allAssignments.length === 0 ? (
+                                <p className="text-xs text-slate-500">No assignments yet.</p>
+                              ) : (
+                                allAssignments.map((a) => {
+                                  const crs = allCourses.find((c) => c.id === a.courseId);
+                                  return (
+                                    <div
+                                      key={a.id}
+                                      className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs"
+                                    >
+                                      <div>
+                                        <p className="font-extrabold text-slate-900">{a.title}</p>
+                                        <p className="text-[11px] font-semibold text-indigo-700">
+                                          {crs?.title || a.courseId} · Max {a.maxMarks} marks · Due {a.dueDate}
+                                        </p>
+                                        <p className="mt-1 text-slate-600">{a.instructions}</p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteAssignment(a.id)}
+                                        aria-label={`Delete assignment ${a.title}`}
+                                        className="rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                            <h3 className="text-base font-extrabold text-slate-900">
+                              Student Submissions &amp; Grading ({allSubmissions.length})
+                            </h3>
+                            <div className="mt-3 space-y-3">
+                              {allSubmissions.length === 0 ? (
+                                <p className="text-xs text-slate-500">
+                                  No student submissions waiting for review.
+                                </p>
+                              ) : (
+                                allSubmissions.map((sub) => {
+                                  const asg = allAssignments.find((a) => a.id === sub.assignmentId);
+                                  const draft = gradeDrafts[sub.id] ?? {
+                                    marks: String(sub.marks ?? asg?.maxMarks ?? 20),
+                                    feedback: sub.feedback ?? '',
+                                  };
+                                  return (
+                                    <div
+                                      key={sub.id}
+                                      className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs space-y-2"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div>
+                                          <p className="font-extrabold text-slate-900">
+                                            {sub.studentName}
+                                          </p>
+                                          <p className="text-[11px] text-slate-500">
+                                            {asg?.title || sub.assignmentId}
+                                          </p>
+                                        </div>
+                                        <span
+                                          className={`rounded px-2 py-0.5 text-[10px] font-extrabold uppercase ${
+                                            sub.status === 'graded'
+                                              ? 'bg-emerald-100 text-emerald-800'
+                                              : 'bg-amber-100 text-amber-800'
+                                          }`}
+                                        >
+                                          {sub.status}
+                                        </span>
+                                      </div>
+                                      <p className="rounded-lg bg-white p-2.5 text-slate-700 border border-slate-200">
+                                        {sub.answerText || sub.submissionText || '(Attachment)'}
+                                      </p>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={asg?.maxMarks ?? 100}
+                                          value={draft.marks}
+                                          onChange={(e) =>
+                                            setGradeDrafts((prev) => ({
+                                              ...prev,
+                                              [sub.id]: { ...draft, marks: e.target.value },
+                                            }))
+                                          }
+                                          aria-label={`Marks for ${sub.studentName}`}
+                                          className="font-mono-tabular w-20 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                                        />
+                                        <input
+                                          type="text"
+                                          value={draft.feedback}
+                                          onChange={(e) =>
+                                            setGradeDrafts((prev) => ({
+                                              ...prev,
+                                              [sub.id]: { ...draft, feedback: e.target.value },
+                                            }))
+                                          }
+                                          placeholder="Teacher feedback..."
+                                          className="min-w-[160px] flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleGradeSubmission(sub)}
+                                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                                        >
+                                          Save Grade
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : courseSubTab === 'announcements' ? (
+                      <div className="space-y-6">
+                        <form
+                          onSubmit={handleCreateAnnouncement}
+                          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-3"
+                        >
+                          <h2 className="text-lg font-extrabold text-slate-900">
+                            Publish Course Announcement
+                          </h2>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <select
+                              aria-label="Announcement Course"
+                              value={annCourseId || allCourses[0]?.id || ''}
+                              onChange={(e) => {
+                                setAnnCourseId(e.target.value);
+                                setAnnBatchId('');
+                              }}
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                            >
+                              {allCourses.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.title}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              aria-label="Announcement Batch"
+                              value={annBatchId}
+                              onChange={(e) => setAnnBatchId(e.target.value)}
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                            >
+                              <option value="">All Batches</option>
+                              {allBatches
+                                .filter((b) => b.courseId === (annCourseId || allCourses[0]?.id))
+                                .map((b) => (
+                                  <option key={b.id} value={b.id}>
+                                    {b.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={annPinned}
+                                onChange={(e) => setAnnPinned(e.target.checked)}
+                                className="h-4 w-4 accent-indigo-600"
+                              />
+                              <span>Pin Notice</span>
+                            </label>
+                          </div>
+                          <input
+                            type="text"
+                            required
+                            value={annTitle}
+                            onChange={(e) => setAnnTitle(e.target.value)}
+                            placeholder="Announcement Headline (e.g. Friday Live Class Rescheduled to 8:00 PM)"
+                            className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm"
+                          />
+                          <textarea
+                            rows={2}
+                            required
+                            value={annMessage}
+                            onChange={(e) => setAnnMessage(e.target.value)}
+                            placeholder="Details for enrolled students..."
+                            className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+                          >
+                            Post Announcement
+                          </button>
+                        </form>
+
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-2.5">
+                          <h3 className="text-base font-extrabold text-slate-900">
+                            Recent Announcements ({allAnnouncements.length})
+                          </h3>
+                          {allAnnouncements.length === 0 ? (
+                            <p className="text-xs text-slate-500">No announcements posted yet.</p>
+                          ) : (
+                            allAnnouncements.map((ann) => {
+                              const crs = allCourses.find((c) => c.id === ann.courseId);
+                              return (
+                                <div
+                                  key={ann.id}
+                                  className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs"
+                                >
+                                  <div>
+                                    <p className="font-extrabold text-slate-900">
+                                      {ann.pinned ? '📌 ' : ''}
+                                      {ann.title}
+                                    </p>
+                                    <p className="text-[11px] font-semibold text-indigo-700">
+                                      {crs?.title || ann.courseId} · By {ann.postedByName || ann.authorName}
+                                    </p>
+                                    <p className="mt-1 text-slate-700">{ann.message}</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteAnnouncement(ann.id)}
+                                    aria-label={`Delete announcement ${ann.title}`}
+                                    className="rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            })
                           )}
                         </div>
-
-                        {/* Search & Filters */}
-                        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-12">
-                          <div className="relative sm:col-span-6">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                              type="search"
-                              value={courseSearch}
-                              onChange={(e) => setCourseSearch(e.target.value)}
-                              placeholder="Filter courses by title, batch tag, or category..."
-                              aria-label="Filter admin courses"
-                              className="w-full rounded-xl border border-slate-300 py-2 pl-9 pr-3 text-xs focus:border-indigo-500 focus:outline-none"
-                            />
+                      </div>
+                    ) : courseSubTab === 'certificates' ? (
+                      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h2 className="text-lg font-extrabold text-slate-900">
+                              Issued Course Certificates ({allCertificates.length})
+                            </h2>
+                            <p className="text-xs text-slate-500">
+                              Official credentials earned by students who passed course completion criteria.
+                            </p>
                           </div>
-                          <select
-                            value={courseCatFilter}
-                            onChange={(e) => setCourseCatFilter(e.target.value)}
-                            aria-label="Filter by category"
-                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold sm:col-span-3"
+                          <button
+                            type="button"
+                            onClick={() => navigate('/verify-certificate')}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
                           >
-                            <option value="all">All Categories</option>
-                            <option value="combos">Combos Only</option>
-                            <option value="SSC English">SSC English</option>
-                            <option value="HSC English">HSC English</option>
-                            <option value="IELTS & Spoken">IELTS & Spoken</option>
-                            <option value="Grammar Pro">Grammar Pro</option>
-                            <option value="Admission">Admission</option>
-                            <option value="Combo Packs">Combo Packs</option>
-                          </select>
-                          <select
-                            value={courseStatusFilter}
-                            onChange={(e) =>
-                              setCourseStatusFilter(e.target.value as 'all' | 'active' | 'draft')
-                            }
-                            aria-label="Filter by publish status"
-                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold sm:col-span-3"
-                          >
-                            <option value="all">All Statuses</option>
-                            <option value="active">Active Only</option>
-                            <option value="draft">Drafts Only</option>
-                          </select>
+                            <ShieldCheck className="h-4 w-4" />
+                            <span>Public Verification Portal</span>
+                          </button>
                         </div>
 
-                        {/* Courses Table */}
-                        <div className="mt-5 overflow-x-auto">
-                          {filteredCourses.length === 0 ? (
+                        <div className="mt-4 space-y-2.5">
+                          {allCertificates.length === 0 ? (
                             <p className="py-8 text-center text-xs text-slate-500">
-                              No courses match your search/filter.
+                              No certificates have been claimed yet.
                             </p>
                           ) : (
-                            <table className="w-full text-left text-sm">
-                              <thead>
-                                <tr className="border-b border-slate-200 text-xs font-bold uppercase text-slate-500">
-                                  <th className="py-2.5 pr-4">Course / Batch</th>
-                                  <th className="py-2.5 pr-4">Category & Tag</th>
-                                  <th className="py-2.5 pr-4">Price</th>
-                                  <th className="py-2.5 pr-4">Enrolled</th>
-                                  <th className="py-2.5 pr-4">Status</th>
-                                  {user.role === 'admin' && <th className="py-2.5">Manage</th>}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {filteredCourses.map((c) => {
-                                  const pricing = calculateDiscountedPrice(c.price, c.originalPrice);
-                                  const isConfirming = confirmCourseDeleteId === c.id;
-                                  const courseBatchesCount = allBatches.filter(
-                                    (b) => b.courseId === c.id
-                                  ).length;
-                                  return (
-                                    <tr key={c.id} className="hover:bg-slate-50/80">
-                                      <td className="py-3 pr-4">
-                                        <div className="flex items-center gap-3">
-                                          <img
-                                            src={c.thumbnail}
-                                            alt={c.title}
-                                            className="h-11 w-16 shrink-0 rounded-lg border border-slate-200 object-cover"
-                                            referrerPolicy="no-referrer"
-                                          />
-                                          <div className="min-w-0">
-                                            <p className="line-clamp-1 font-bold text-slate-900">
-                                              {c.title}
-                                            </p>
-                                            <p className="text-[11px] text-slate-500">
-                                              {c.isCombo
-                                                ? `Combo (${c.includedCourses?.length ?? 0} modules)`
-                                                : `${courseBatchesCount} batch${courseBatchesCount === 1 ? '' : 'es'}`}{' '}
-                                              · {c.branchIds.length} branches
-                                            </p>
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="py-3 pr-4 text-xs">
-                                        <p className="font-semibold text-slate-800">{c.category}</p>
-                                        <p className="text-[11px] text-indigo-700">{c.levelTag}</p>
-                                      </td>
-                                      <td className="font-mono-tabular py-3 pr-4 text-xs">
-                                        <p className="font-extrabold text-slate-900">
-                                          {c.price === 0 ? 'Free' : `৳${c.price}`}
-                                        </p>
-                                        {pricing.baseDiscountPercent > 0 && (
-                                          <p className="text-[11px] text-emerald-700">
-                                            -{pricing.baseDiscountPercent}% (৳{c.originalPrice})
-                                          </p>
-                                        )}
-                                      </td>
-                                      <td className="font-mono-tabular py-3 pr-4 text-xs font-semibold">
-                                        {c.enrolledCount.toLocaleString()}
-                                      </td>
-                                      <td className="py-3 pr-4">
-                                        {user.role === 'admin' ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleToggleCourseStatus(c)}
-                                            aria-label={`Toggle status for ${c.title}`}
-                                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase ${
-                                              c.status === 'active'
-                                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                            }`}
-                                          >
-                                            {c.status === 'active' ? (
-                                              <Eye className="h-3 w-3" />
-                                            ) : (
-                                              <EyeOff className="h-3 w-3" />
-                                            )}
-                                            <span>{c.status}</span>
-                                          </button>
-                                        ) : (
-                                          <span className="text-xs font-bold uppercase text-emerald-700">
-                                            {c.status}
-                                          </span>
-                                        )}
-                                      </td>
-                                      {user.role === 'admin' && (
-                                        <td className="py-3">
-                                          <div className="flex items-center gap-1.5">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setEditingCourse(c);
-                                                setCourseModalOpen(true);
-                                              }}
-                                              aria-label={`Edit ${c.title}`}
-                                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-indigo-400 hover:text-indigo-700"
-                                            >
-                                              <Pencil className="h-3.5 w-3.5" />
-                                              <span>Edit</span>
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleDuplicateCourse(c)}
-                                              aria-label={`Duplicate ${c.title}`}
-                                              title="Duplicate as Draft"
-                                              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:text-indigo-700"
-                                            >
-                                              <Copy className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleDeleteCourse(c.id)}
-                                              aria-label={
-                                                isConfirming
-                                                  ? `Confirm delete ${c.title}`
-                                                  : `Delete ${c.title}`
-                                              }
-                                              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold ${
-                                                isConfirming
-                                                  ? 'bg-rose-600 text-white'
-                                                  : 'p-1.5 text-rose-600 hover:bg-rose-50'
-                                              }`}
-                                            >
-                                              <Trash2 className="h-3.5 w-3.5" />
-                                              {isConfirming && <span>Confirm</span>}
-                                            </button>
-                                          </div>
-                                        </td>
-                                      )}
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                            allCertificates.map((cert) => (
+                              <div
+                                key={cert.id}
+                                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs"
+                              >
+                                <div>
+                                  <p className="font-mono-tabular font-extrabold text-indigo-700">
+                                    {cert.certificateNumber}
+                                  </p>
+                                  <p className="mt-0.5 text-sm font-extrabold text-slate-900">
+                                    {cert.studentName} · {cert.courseTitle}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">
+                                    Completion {cert.completionPercent}% · Issued{' '}
+                                    {new Date(cert.issuedAt).toLocaleDateString()}
+                                    {cert.revoked ? ' · REVOKED' : ''}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewCert(cert)}
+                                    className="rounded-lg bg-[#062436] px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-600"
+                                  >
+                                    View / Print
+                                  </button>
+                                  {user.role === 'admin' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleRevokeCertificate(cert)}
+                                      className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${
+                                        cert.revoked
+                                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                          : 'border-rose-200 bg-rose-50 text-rose-700'
+                                      }`}
+                                    >
+                                      {cert.revoked ? 'Reinstate' : 'Revoke'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))
                           )}
                         </div>
                       </div>
@@ -1760,10 +2057,13 @@ export function PortalPage({ navigate }: PortalPageProps) {
                     <div className="mt-4 space-y-2.5">
                       {(data.exams ?? []).map((ex) => {
                         const confirming = confirmExamDeleteId === ex.id;
+                        const attemptsCount = (data.examAttempts ?? []).filter(
+                          (a) => a.examId === ex.id
+                        ).length;
                         return (
                           <div
                             key={ex.id}
-                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm"
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm"
                           >
                             <div>
                               <p className="font-bold text-slate-900">{ex.title}</p>
@@ -1772,10 +2072,18 @@ export function PortalPage({ navigate }: PortalPageProps) {
                                 {ex.negativeMarkPerWrong ? ` · -${ex.negativeMarkPerWrong} neg` : ''}
                               </p>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="text-xs font-bold uppercase text-emerald-700">
                                 {ex.visibility}
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => setGradingExam(ex)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                              >
+                                <ClipboardList className="h-3.5 w-3.5" />
+                                <span>Submissions &amp; Grade ({attemptsCount})</span>
+                              </button>
                               <button
                                 type="button"
                                 onClick={async () => {
@@ -1806,9 +2114,12 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 </div>
               )}
 
-              {/* CATALOG, POSTS & COUPONS STUDIO (Admin) */}
-              {currentSection === 'catalog_cms' && user.role === 'admin' && data && (
+              {/* CATALOG, POSTS & COUPONS STUDIO (Admin & Teacher) */}
+              {currentSection === 'catalog_cms' &&
+                (user.role === 'admin' || user.role === 'teacher') &&
+                data && (
                 <CatalogContentPanel
+                  role={user.role}
                   ebooks={data.ebooks ?? bootstrap?.ebooks ?? []}
                   products={data.products ?? bootstrap?.products ?? []}
                   instructors={data.instructors ?? bootstrap?.instructors ?? []}
@@ -1858,23 +2169,40 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 />
               )}
 
-              {/* ENROLLMENTS & FEES */}
-              {currentSection === 'enrollments' && data && (
-                <EnrollmentsFeePanel
-                  role={user.role}
-                  userBranchId={user.branchId}
-                  enrollments={data.enrollments ?? []}
-                  courses={data.courses ?? bootstrap?.courses ?? []}
-                  branches={data.branches ?? bootstrap?.branches ?? []}
-                  users={data.users ?? []}
-                  paymentGateways={data.paymentGateways ?? []}
-                  darkMode={darkMode}
-                  onRefresh={async () => {
-                    await Promise.all([loadPortal(), refreshBootstrap()]);
-                  }}
-                  onNotify={notify}
-                />
-              )}
+              {/* TEACHER STUDENT ROSTER OR ENROLLMENTS & FEES */}
+              {currentSection === 'enrollments' &&
+                data &&
+                (user.role === 'teacher' ? (
+                  <TeacherRosterPanel
+                    users={data.users ?? []}
+                    courses={data.courses ?? bootstrap?.courses ?? []}
+                    lessons={data.lessons ?? []}
+                    enrollments={data.enrollments ?? []}
+                    examAttempts={data.examAttempts ?? []}
+                    attendance={data.attendance ?? []}
+                    rewardsByUser={data.rewardsByUser ?? {}}
+                    onRefresh={async () => {
+                      await Promise.all([loadPortal(), refreshBootstrap()]);
+                    }}
+                    onNotify={notify}
+                  />
+                ) : (
+                  <EnrollmentsFeePanel
+                    role={user.role}
+                    userBranchId={user.branchId}
+                    enrollments={data.enrollments ?? []}
+                    courses={data.courses ?? bootstrap?.courses ?? []}
+                    batches={data.batches ?? []}
+                    branches={data.branches ?? bootstrap?.branches ?? []}
+                    users={data.users ?? []}
+                    paymentGateways={data.paymentGateways ?? []}
+                    darkMode={darkMode}
+                    onRefresh={async () => {
+                      await Promise.all([loadPortal(), refreshBootstrap()]);
+                    }}
+                    onNotify={notify}
+                  />
+                ))}
 
               {/* DEDICATED PAYMENT SYSTEM & GATEWAYS */}
               {currentSection === 'payments' && data && (
@@ -2081,122 +2409,17 @@ export function PortalPage({ navigate }: PortalPageProps) {
 
               {/* USERS & ROLES */}
               {currentSection === 'users' && data && (
-                <div className="space-y-6">
-                  {user.role === 'admin' && (
-                    <form
-                      onSubmit={handleCreateUser}
-                      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs"
-                    >
-                      <h2 className="text-lg font-extrabold text-slate-900">
-                        Create Staff / Student / Guardian User
-                      </h2>
-                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <input
-                          type="text"
-                          required
-                          placeholder="Full Name"
-                          value={uName}
-                          onChange={(e) => setUName(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        />
-                        <input
-                          type="email"
-                          required
-                          placeholder="Email"
-                          value={uEmail}
-                          onChange={(e) => setUEmail(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        />
-                        <input
-                          type="tel"
-                          placeholder="Phone"
-                          value={uPhone}
-                          onChange={(e) => setUPhone(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        />
-                        <select
-                          value={uRole}
-                          onChange={(e) => setURole(e.target.value as UserRole)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        >
-                          <option value="teacher">Teacher</option>
-                          <option value="branch_manager">Branch Manager</option>
-                          <option value="student">Student</option>
-                          <option value="guardian">Guardian</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                        <select
-                          value={uBranchId}
-                          onChange={(e) => setUBranchId(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        >
-                          {(data.branches ?? []).map((b) => (
-                            <option key={b.id} value={b.id}>
-                              {b.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="submit"
-                          className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white"
-                        >
-                          Create User
-                        </button>
-                      </div>
-                    </form>
-                  )}
-
-                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                    <h2 className="text-lg font-extrabold text-slate-900">
-                      Users Directory ({data.users?.length ?? 0})
-                    </h2>
-                    <div className="mt-4 overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-200 text-xs font-bold uppercase text-slate-500">
-                            <th className="py-2.5 pr-4">Name</th>
-                            <th className="py-2.5 pr-4">Email</th>
-                            <th className="py-2.5 pr-4">Roll / Phone</th>
-                            <th className="py-2.5 pr-4">Role</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {(data.users ?? []).map((u) => (
-                            <tr key={u.id}>
-                              <td className="py-3 pr-4 font-bold text-slate-900">{u.name}</td>
-                              <td className="py-3 pr-4 text-xs text-slate-600">{u.email}</td>
-                              <td className="font-mono-tabular py-3 pr-4 text-xs text-slate-600">
-                                {u.rollNumber || u.phone}
-                              </td>
-                              <td className="py-3 pr-4">
-                                {user.role === 'admin' ? (
-                                  <select
-                                    aria-label={`Change role for ${u.name}`}
-                                    value={u.role}
-                                    onChange={(e) =>
-                                      handleRoleUpdate(u.id, e.target.value as UserRole)
-                                    }
-                                    className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-bold"
-                                  >
-                                    <option value="admin">Admin</option>
-                                    <option value="branch_manager">Branch Manager</option>
-                                    <option value="teacher">Teacher</option>
-                                    <option value="student">Student</option>
-                                    <option value="guardian">Guardian</option>
-                                  </select>
-                                ) : (
-                                  <span className="text-xs font-bold text-slate-700">
-                                    {ROLE_LABELS[u.role]}
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
+                <UsersManagementPanel
+                  currentUser={user}
+                  users={data.users ?? []}
+                  branches={data.branches ?? bootstrap?.branches ?? []}
+                  darkMode={darkMode}
+                  defaultCreateRole={uRole}
+                  onRefresh={async () => {
+                    await Promise.all([loadPortal(), refreshBootstrap()]);
+                  }}
+                  onNotify={notify}
+                />
               )}
 
               {/* ORDERS */}
@@ -2371,6 +2594,127 @@ export function PortalPage({ navigate }: PortalPageProps) {
                     </div>
                   </div>
 
+                  {/* Upcoming & Live Classes */}
+                  {(() => {
+                    const liveLessons = (data.lessons ?? []).filter(
+                      (l) => l.lessonType === 'live'
+                    );
+                    if (liveLessons.length === 0) return null;
+                    return (
+                      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
+                            <Radio className="h-4 w-4 text-rose-600" />
+                            <span>Upcoming &amp; Live Classroom Sessions</span>
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/learn')}
+                            className="text-xs font-bold text-indigo-600 hover:underline"
+                          >
+                            Open Classroom →
+                          </button>
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {liveLessons.slice(0, 4).map((l) => (
+                            <div
+                              key={l.id}
+                              className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                                      l.liveStatus === 'live_now'
+                                        ? 'bg-rose-600 text-white'
+                                        : 'bg-sky-100 text-sky-800'
+                                    }`}
+                                  >
+                                    {l.liveStatus === 'live_now' ? 'LIVE NOW' : l.liveStatus || 'SCHEDULED'}
+                                  </span>
+                                  <span className="truncate text-[11px] font-semibold text-slate-500">
+                                    {l.batchName || l.moduleName}
+                                  </span>
+                                </div>
+                                <p className="mt-1 truncate font-bold text-slate-900">{l.title}</p>
+                                {l.scheduledAt && (
+                                  <p className="text-[11px] text-slate-500">{l.scheduledAt}</p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => navigate('/learn')}
+                                className="shrink-0 rounded-lg bg-[#062436] px-3 py-1.5 font-bold text-white hover:bg-indigo-600"
+                              >
+                                Join
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* My Exam Scorecards & Teacher Feedback */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
+                        <ClipboardList className="h-4 w-4 text-indigo-600" />
+                        <span>My Exam Scorecards &amp; Teacher Feedback</span>
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/exams')}
+                        className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                      >
+                        Take Mock Exam
+                      </button>
+                    </div>
+                    {(data.examAttempts ?? []).length === 0 ? (
+                      <p className="mt-3 text-xs text-slate-500">
+                        No exam attempts yet. Attempt a live quiz in Exam Center to see your scorecard &amp; instructor feedback here.
+                      </p>
+                    ) : (
+                      <div className="mt-3 space-y-2.5">
+                        {(data.examAttempts ?? []).map((att) => (
+                          <div
+                            key={att.id}
+                            className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="font-bold text-slate-900">{att.examTitle}</p>
+                                <p className="text-[11px] text-slate-500">
+                                  Submitted {new Date(att.submittedAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono-tabular rounded-lg bg-indigo-100 px-2.5 py-1 font-extrabold text-indigo-800">
+                                  {att.score}/{att.totalMarks} ({att.percentage}%) · Grade {att.grade}
+                                </span>
+                                <span
+                                  className={`rounded-lg px-2 py-1 font-bold uppercase ${
+                                    att.passed
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-rose-100 text-rose-800'
+                                  }`}
+                                >
+                                  {att.passed ? 'Passed' : 'Needs Review'}
+                                </span>
+                              </div>
+                            </div>
+                            {att.teacherFeedback && (
+                              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
+                                <strong className="font-bold">Instructor Feedback:</strong>{' '}
+                                {att.teacherFeedback}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {(data.scormPackages ?? []).length > 0 && (
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
                       <h3 className="text-base font-extrabold text-slate-900">
@@ -2393,6 +2737,61 @@ export function PortalPage({ navigate }: PortalPageProps) {
                             >
                               <Play className="h-3 w-3" /> Launch
                             </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(data.certificates ?? []).length > 0 && (
+                    <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-xs">
+                      <h3 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
+                        <Award className="h-4 w-4 text-amber-500" />
+                        <span>My Earned Certificates ({(data.certificates ?? []).length})</span>
+                      </h3>
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {(data.certificates ?? []).map((cert) => (
+                          <div
+                            key={cert.id}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5 text-xs"
+                          >
+                            <div>
+                              <p className="font-mono-tabular font-extrabold text-emerald-800">
+                                {cert.certificateNumber}
+                              </p>
+                              <p className="font-bold text-slate-900">{cert.courseTitle}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewCert(cert)}
+                              className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white hover:bg-emerald-700"
+                            >
+                              View PDF
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(data.announcements ?? []).length > 0 && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                      <h3 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
+                        <Megaphone className="h-4 w-4 text-indigo-600" />
+                        <span>Course Announcements</span>
+                      </h3>
+                      <div className="mt-3 space-y-2 text-xs">
+                        {(data.announcements ?? []).slice(0, 4).map((ann) => (
+                          <div
+                            key={ann.id}
+                            className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5"
+                          >
+                            <p className="font-extrabold text-slate-900">{ann.title}</p>
+                            <p className="mt-0.5 text-slate-700">{ann.message}</p>
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              By {ann.postedByName || ann.authorName} ·{' '}
+                              {new Date(ann.createdAt).toLocaleDateString()}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -2515,7 +2914,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
                     students:
                       (data.branches ?? []).reduce((s, b) => s + b.activeStudents, 0) +
                       (data.courses ?? []).reduce((s, c) => s + c.enrolledCount, 0),
-                    courses: (data.courses ?? []).filter((c) => c.status === 'active').length,
+                    courses: (data.courses ?? []).filter((c) => isCourseStatusLive(c.status)).length,
                     teachers: (bootstrap?.instructors ?? []).length,
                     videos: (data.lessons ?? []).length * 140 + 480,
                   }}
@@ -2644,6 +3043,16 @@ export function PortalPage({ navigate }: PortalPageProps) {
                   )}
                 </div>
               )}
+
+              {/* SELF-SERVICE PROFILE & ACCOUNT SECURITY (ALL ROLES) */}
+              {currentSection === 'profile' && (
+                <UserProfilePanel
+                  user={user}
+                  branches={data?.branches ?? bootstrap?.branches ?? []}
+                  darkMode={darkMode}
+                  onNotify={notify}
+                />
+              )}
             </>
           )}
           </section>
@@ -2674,14 +3083,16 @@ export function PortalPage({ navigate }: PortalPageProps) {
         />
       )}
 
-      {user.role === 'admin' && data && (
-        <AdminCourseModal
+      {(user.role === 'admin' || user.role === 'teacher') && data && (
+        <CourseWizardModal
           open={courseModalOpen}
           course={editingCourse}
+          templateDefaults={wizardTemplateDefaults}
+          sampleModules={wizardSampleModules}
           allCourses={data.courses ?? []}
           branches={data.branches ?? bootstrap?.branches ?? []}
           instructors={bootstrap?.instructors ?? []}
-          lessons={data.lessons ?? []}
+          batches={data.batches ?? []}
           onClose={() => setCourseModalOpen(false)}
           onSaved={async (msg) => {
             await Promise.all([loadPortal(), refreshBootstrap()]);
@@ -2689,6 +3100,27 @@ export function PortalPage({ navigate }: PortalPageProps) {
           }}
         />
       )}
+
+      {(user.role === 'admin' || user.role === 'teacher') && data && (
+        <CurriculumBuilderModal
+          open={Boolean(curriculumCourse)}
+          course={curriculumCourse}
+          batches={data.batches ?? []}
+          onClose={() => setCurriculumCourse(null)}
+          onChanged={async () => {
+            await Promise.all([loadPortal(), refreshBootstrap()]);
+          }}
+          onNotify={notify}
+        />
+      )}
+
+      <CertificateModal
+        certificate={previewCert}
+        onClose={() => setPreviewCert(null)}
+        onOpenVerifyPage={(certNo) =>
+          navigate(`/verify-certificate?cert=${encodeURIComponent(certNo)}`)
+        }
+      />
 
       {(user.role === 'admin' || user.role === 'teacher' || user.role === 'branch_manager') &&
         data && (
@@ -2719,6 +3151,18 @@ export function PortalPage({ navigate }: PortalPageProps) {
             await Promise.all([loadPortal(), refreshBootstrap()]);
             notify(msg);
           }}
+        />
+      )}
+
+      {gradingExam && data && (
+        <ExamSubmissionsModal
+          exam={gradingExam}
+          attempts={(data.examAttempts ?? []).filter((a) => a.examId === gradingExam.id)}
+          onClose={() => setGradingExam(null)}
+          onRefresh={async () => {
+            await Promise.all([loadPortal(), refreshBootstrap()]);
+          }}
+          onNotify={notify}
         />
       )}
 

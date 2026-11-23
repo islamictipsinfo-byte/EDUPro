@@ -234,7 +234,8 @@ export function DashboardTopbar({
 
         <button
           type="button"
-          onClick={() => onSelectSection('settings')}
+          onClick={() => onSelectSection('profile')}
+          aria-label="Open My Profile and Account Security"
           className={`hidden items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-left transition-colors sm:flex ${
             darkMode
               ? 'border-[#25365E] bg-[#132043] hover:border-blue-400'

@@ -19,6 +19,11 @@ import {
   computeAuditLogSummary,
   filterAuditLogs,
 } from '../lib/auditLogs';
+import {
+  calculateCoursePricingServerSide,
+  isCourseStatusLive,
+  validateEnrollmentRequest,
+} from '../lib/courseEnterprise';
 import type {
   ApiPlugin,
   AttendanceRecord,
@@ -169,6 +174,7 @@ export function createPlatformRouter(
       referenceType,
       courseId,
       ebookId,
+      batchId,
       branchId,
       items,
       deliveryMode,
@@ -204,7 +210,12 @@ export function createPlatformRouter(
     const isCash = safeGateway === 'Branch Cash' || matchedGw?.providerType === 'cash_desk';
     const isManual = safeGateway === 'Manual Bank Transfer' || matchedGw?.providerType === 'bank_transfer';
 
-    if (!isCash) {
+    const maybeFreeCourse =
+      referenceType === 'course'
+        ? db.courses.find((c) => c.id === courseId && (Boolean(c.isFree) || (c.price === 0 && !(c.admissionFee && c.admissionFee > 0))))
+        : undefined;
+
+    if (!isCash && !maybeFreeCourse) {
       if (!cleanTrx || cleanTrx.length < 5) {
         res.status(400).json({ error: 'Valid Transaction / Slip Reference ID (min 5 chars) is required.' });
         return;
@@ -277,59 +288,64 @@ export function createPlatformRouter(
     }
 
     if (referenceType === 'course') {
-      const course = db.courses.find((c) => c.id === courseId && c.status === 'active');
-      if (!course) {
-        res.status(404).json({ error: 'Course not found.' });
+      const course = db.courses.find((c) => c.id === courseId && isCourseStatusLive(c.status));
+      const check = validateEnrollmentRequest({
+        userId: user.id,
+        course,
+        batchId: batchId ? String(batchId).trim() : null,
+        batches: db.batches,
+        enrollments: db.enrollments,
+        branchId: branchId ? String(branchId).trim() : null,
+        branches: db.branches,
+      });
+      if (check.ok === false) {
+        res.status(check.statusCode).json({ error: check.error });
         return;
       }
 
       const activeFallbackBranch = db.branches.find((b) => b.status === 'active')?.id ?? '';
       const rawBranchId = String(branchId ?? '').trim();
-      if (rawBranchId && rawBranchId !== 'online') {
-        const matchedBranch = db.branches.find((b) => b.id === rawBranchId);
-        if (matchedBranch && matchedBranch.status !== 'active') {
-          res.status(400).json({
-            error: `Branch "${matchedBranch.name}" is currently inactive. Please select an active campus.`,
-          });
-          return;
+      const resolvedCourseBranchId =
+        check.resolvedBatch?.branchId || rawBranchId || activeFallbackBranch || 'online';
+
+      const pricing = calculateCoursePricingServerSide(course!, coupon);
+      const status: Enrollment['status'] =
+        pricing.isFree ? 'approved' : isCash || isManual ? 'pending' : 'approved';
+
+      const enrollment: Enrollment = {
+        id: `enr-${Date.now()}`,
+        userId: user.id,
+        studentName: user.name,
+        studentEmail: user.email,
+        courseId: course!.id,
+        courseTitle: course!.title,
+        batchId: check.resolvedBatch?.id ?? null,
+        batchName: check.resolvedBatch?.name,
+        branchId: resolvedCourseBranchId,
+        paymentMethod: safeGateway,
+        trxId: pricing.isFree ? `FREE-${Date.now().toString().slice(-4)}` : cleanTrx || 'CASH-DESK',
+        invoiceNo,
+        amountPaid: pricing.totalPayable,
+        couponUsed: pricing.appliedCouponCode ?? undefined,
+        status,
+        completedLessonIds: [],
+        history: [
+          {
+            id: `eh-${Date.now()}`,
+            action: 'created',
+            note: `Enrolled via ${safeGateway}${check.resolvedBatch ? ` (${check.resolvedBatch.name})` : ''} · ৳${pricing.totalPayable}`,
+            actorName: user.name,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        enrolledAt: new Date().toISOString(),
+      };
+      db.enrollments.unshift(enrollment);
+      if (status === 'approved') {
+        course!.enrolledCount += 1;
+        if (check.resolvedBatch) {
+          check.resolvedBatch.enrolledSeats += 1;
         }
-      }
-      const resolvedCourseBranchId = rawBranchId || activeFallbackBranch || 'online';
-
-      const pricing = calculateDiscountedPrice(course.price, course.originalPrice, coupon);
-      const status: Enrollment['status'] = isCash || isManual ? 'pending' : 'approved';
-
-      let enrollment = db.enrollments.find(
-        (e) => e.userId === user.id && e.courseId === course.id
-      );
-      if (enrollment) {
-        enrollment.status = status;
-        enrollment.branchId = resolvedCourseBranchId;
-        enrollment.paymentMethod = safeGateway;
-        enrollment.trxId = cleanTrx || 'CASH-DESK';
-        enrollment.invoiceNo = invoiceNo;
-        enrollment.amountPaid = pricing.finalPrice;
-        enrollment.couponUsed = pricing.appliedCouponCode ?? undefined;
-      } else {
-        enrollment = {
-          id: `enr-${Date.now()}`,
-          userId: user.id,
-          studentName: user.name,
-          studentEmail: user.email,
-          courseId: course.id,
-          courseTitle: course.title,
-          branchId: resolvedCourseBranchId,
-          paymentMethod: safeGateway,
-          trxId: cleanTrx || 'CASH-DESK',
-          invoiceNo,
-          amountPaid: pricing.finalPrice,
-          couponUsed: pricing.appliedCouponCode ?? undefined,
-          status,
-          completedLessonIds: [],
-          enrolledAt: new Date().toISOString(),
-        };
-        db.enrollments.unshift(enrollment);
-        if (status === 'approved') course.enrolledCount += 1;
       }
 
       const txn: PaymentTransaction = {
@@ -341,28 +357,36 @@ export function createPlatformRouter(
         payerName: user.name,
         gateway: safeGateway,
         walletOrLast4: String(walletOrLast4 || phone || user.phone).slice(-14),
-        trxId: cleanTrx || `CASH-${Date.now().toString().slice(-5)}`,
-        subtotal: pricing.basePrice,
+        trxId: enrollment.trxId || `CASH-${Date.now().toString().slice(-5)}`,
+        subtotal: pricing.discountedFee + pricing.admissionFee,
         discountAmount: pricing.couponDiscountAmount,
         couponCode: pricing.appliedCouponCode ?? undefined,
         deliveryFee: 0,
-        totalAmount: pricing.finalPrice,
+        totalAmount: pricing.totalPayable,
         status: status === 'approved' ? 'completed' : 'pending_verification',
         createdAt: new Date().toISOString(),
       };
       db.transactions.unshift(txn);
-      db.financialRecords.unshift({
-        id: `fin-${Date.now()}`,
-        type: 'income',
-        category: 'Course Tuition Fee',
-        title: `${course.title} (${safeGateway}) — ${user.name}`,
-        amount: pricing.finalPrice,
-        branchId: enrollment.branchId,
-        date: new Date().toISOString().slice(0, 10),
-        recordedBy: user.name,
-      });
+      if (pricing.totalPayable > 0) {
+        db.financialRecords.unshift({
+          id: `fin-${Date.now()}`,
+          type: 'income',
+          category: 'Course Tuition Fee',
+          title: `${course!.title} (${safeGateway}) — ${user.name}`,
+          amount: pricing.totalPayable,
+          branchId: enrollment.branchId,
+          date: new Date().toISOString().slice(0, 10),
+          recordedBy: user.name,
+        });
+      }
 
-      recordAuditLog(db, user, 'PAYMENT_CHECKOUT', course.title, `${safeGateway} · ৳${pricing.finalPrice} · ${invoiceNo}`);
+      recordAuditLog(
+        db,
+        user,
+        'PAYMENT_CHECKOUT',
+        course!.title,
+        `${safeGateway} · ৳${pricing.totalPayable} · ${invoiceNo}`
+      );
       saveDb(db);
       res.status(201).json({ transaction: txn, enrollment });
       return;
@@ -834,7 +858,7 @@ export function createPlatformRouter(
     });
   });
 
-  router.post('/api/portal/ebooks', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+  router.post('/api/portal/ebooks', requireAuth, requireRole(['admin', 'teacher']), (req: AuthedRequest, res) => {
     const {
       title,
       level,
@@ -883,7 +907,7 @@ export function createPlatformRouter(
     res.status(201).json({ ebook });
   });
 
-  router.put('/api/portal/ebooks/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+  router.put('/api/portal/ebooks/:id', requireAuth, requireRole(['admin', 'teacher']), (req: AuthedRequest, res) => {
     const db = getDb();
     const ebook = db.ebooks.find((e) => e.id === req.params.id);
     if (!ebook) return void res.status(404).json({ error: 'E-Book not found.' });
@@ -1870,7 +1894,7 @@ export function createPlatformRouter(
     res.json({ deletedId: removed.id, webhooks: db.webhooks });
   });
 
-  router.post('/api/portal/campaigns', requireAuth, requireRole(['admin', 'branch_manager']), (req: AuthedRequest, res) => {
+  router.post('/api/portal/campaigns', requireAuth, requireRole(['admin', 'branch_manager', 'teacher']), (req: AuthedRequest, res) => {
     const { title, channel, audience, message } = req.body ?? {};
     if (!String(title ?? '').trim() || !String(message ?? '').trim()) {
       res.status(400).json({ error: 'Campaign title and broadcast message are required.' });

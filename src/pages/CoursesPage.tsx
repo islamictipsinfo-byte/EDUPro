@@ -9,19 +9,21 @@ import {
   Plus,
   Search,
   Settings2,
+  ShieldCheck,
   Trash2,
   Users,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { AdminCourseModal } from '../components/AdminCourseModal';
+import { CourseWizardModal } from '../components/courses/CourseWizardModal';
 import { useAuth } from '../context/AuthContext';
+import { isCourseStatusLive } from '../lib/courseEnterprise';
 import {
   calculateDiscountedPrice,
   filterCourses,
   splitCoursesIntoSections,
   type CourseSortOption,
 } from '../lib/domain';
-import type { Course, CourseLesson } from '../types';
+import type { Course, CourseBatch } from '../types';
 
 interface CoursesPageProps {
   navigate: (path: string) => void;
@@ -41,6 +43,7 @@ const FILTER_TABS = [
 export function CoursesPage({ navigate, initialCategory = 'All Courses' }: CoursesPageProps) {
   const { user, bootstrap, loadingBootstrap, apiFetch, refreshBootstrap } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const canManageCourses = user?.role === 'admin' || user?.role === 'teacher';
 
   const [selectedCat, setSelectedCat] = useState(initialCategory);
   const [search, setSearch] = useState('');
@@ -48,7 +51,7 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
   const [showDrafts, setShowDrafts] = useState(true);
 
   const [adminCourses, setAdminCourses] = useState<Course[] | null>(null);
-  const [adminLessons, setAdminLessons] = useState<CourseLesson[]>([]);
+  const [adminBatches, setAdminBatches] = useState<CourseBatch[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -59,20 +62,20 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
   }, [initialCategory]);
 
   const loadAdminCourses = useCallback(async () => {
-    if (!isAdmin) {
+    if (!canManageCourses) {
       setAdminCourses(null);
       return;
     }
     try {
-      const res = await apiFetch<{ courses: Course[]; lessons: CourseLesson[] }>(
+      const res = await apiFetch<{ courses: Course[]; batches?: CourseBatch[] }>(
         '/api/portal/courses'
       );
       setAdminCourses(res.courses);
-      setAdminLessons(res.lessons);
+      setAdminBatches(res.batches ?? []);
     } catch {
       setAdminCourses(null);
     }
-  }, [isAdmin, apiFetch]);
+  }, [canManageCourses, apiFetch]);
 
   useEffect(() => {
     void loadAdminCourses();
@@ -83,16 +86,16 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
     window.setTimeout(() => setToast(null), 4000);
   };
 
-  const sourceCourses = isAdmin && adminCourses ? adminCourses : (bootstrap?.courses ?? []);
+  const sourceCourses = canManageCourses && adminCourses ? adminCourses : (bootstrap?.courses ?? []);
   const filtered = filterCourses(sourceCourses, selectedCat, search, {
-    includeDrafts: isAdmin && showDrafts,
+    includeDrafts: canManageCourses && showDrafts,
     sortBy,
   });
 
   const { combos, regular } = splitCoursesIntoSections(filtered);
 
   const countForTab = (tab: string) =>
-    filterCourses(sourceCourses, tab, '', { includeDrafts: isAdmin && showDrafts }).length;
+    filterCourses(sourceCourses, tab, '', { includeDrafts: canManageCourses && showDrafts }).length;
 
   const handleOpenCreate = () => {
     setEditingCourse(null);
@@ -105,7 +108,7 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
   };
 
   const handleToggleStatus = async (course: Course) => {
-    const nextStatus = course.status === 'active' ? 'draft' : 'active';
+    const nextStatus = isCourseStatusLive(course.status) ? 'unpublished' : 'published';
     await apiFetch(`/api/portal/courses/${course.id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status: nextStatus }),
@@ -134,16 +137,17 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
   };
 
   const renderAdminControls = (course: Course) => {
-    if (!isAdmin) return null;
+    if (!canManageCourses) return null;
     const isConfirming = confirmDeleteId === course.id;
+    const live = isCourseStatusLive(course.status);
     return (
       <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-100 bg-slate-50 px-4 py-2.5">
         <span
           className={`text-[11px] font-bold uppercase ${
-            course.status === 'active' ? 'text-emerald-700' : 'text-amber-700'
+            live ? 'text-emerald-700' : 'text-amber-700'
           }`}
         >
-          {course.status === 'active' ? 'Live' : 'Draft'}
+          {live ? 'Published' : course.status}
         </span>
         <div className="flex items-center gap-1">
           <button
@@ -158,17 +162,11 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
           <button
             type="button"
             onClick={() => handleToggleStatus(course)}
-            aria-label={
-              course.status === 'active' ? `Unpublish ${course.title}` : `Publish ${course.title}`
-            }
-            title={course.status === 'active' ? 'Move to Draft' : 'Publish Active'}
+            aria-label={live ? `Unpublish ${course.title}` : `Publish ${course.title}`}
+            title={live ? 'Unpublish' : 'Publish'}
             className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:text-indigo-700"
           >
-            {course.status === 'active' ? (
-              <EyeOff className="h-3.5 w-3.5" />
-            ) : (
-              <Eye className="h-3.5 w-3.5" />
-            )}
+            {live ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
           <button
             type="button"
@@ -179,21 +177,23 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
-          <button
-            type="button"
-            onClick={() => handleDelete(course)}
-            aria-label={
-              isConfirming ? `Confirm delete ${course.title}` : `Delete ${course.title}`
-            }
-            className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold transition-colors ${
-              isConfirming
-                ? 'bg-rose-600 text-white'
-                : 'border border-rose-200 bg-white text-rose-600 hover:bg-rose-50'
-            }`}
-          >
-            <Trash2 className="h-3 w-3" />
-            {isConfirming && <span>Confirm</span>}
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => handleDelete(course)}
+              aria-label={
+                isConfirming ? `Confirm delete ${course.title}` : `Delete ${course.title}`
+              }
+              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold transition-colors ${
+                isConfirming
+                  ? 'bg-rose-600 text-white'
+                  : 'border border-rose-200 bg-white text-rose-600 hover:bg-rose-50'
+              }`}
+            >
+              <Trash2 className="h-3 w-3" />
+              {isConfirming && <span>Confirm</span>}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -237,6 +237,14 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>
             </select>
+            <button
+              type="button"
+              onClick={() => navigate('/verify-certificate')}
+              className="inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+            >
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <span>Verify Certificate</span>
+            </button>
           </div>
 
           {/* Category / Batch Filter Tabs */}
@@ -268,8 +276,8 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
           </div>
         </div>
 
-        {/* Admin Quick Management Strip */}
-        {isAdmin && (
+        {/* Admin & Teacher Quick Management Strip */}
+        {canManageCourses && (
           <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-white p-4 shadow-xs">
             <div className="flex items-center gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#062436] text-amber-400">
@@ -277,10 +285,10 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
               </span>
               <div>
                 <p className="text-sm font-extrabold text-slate-900">
-                  Admin Course Control Mode
+                  {isAdmin ? 'Admin Course Control Mode' : 'Instructor Course Control Mode'}
                 </p>
                 <p className="text-xs text-slate-600">
-                  Add, modify, duplicate, toggle draft/active, or delete courses directly from here or in Unified Portal.
+                  Create via 5-Step Wizard, duplicate, publish/unpublish, or open the Full Portal Console for Curriculum Builder &amp; Analytics.
                 </p>
               </div>
             </div>
@@ -300,7 +308,7 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
                 className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700"
               >
                 <Plus className="h-4 w-4" />
-                <span>Add Course / Combo</span>
+                <span>5-Step Course Wizard</span>
               </button>
               <button
                 type="button"
@@ -563,14 +571,14 @@ export function CoursesPage({ navigate, initialCategory = 'All Courses' }: Cours
         )}
       </div>
 
-      {isAdmin && (
-        <AdminCourseModal
+      {canManageCourses && (
+        <CourseWizardModal
           open={modalOpen}
           course={editingCourse}
           allCourses={sourceCourses}
           branches={bootstrap?.branches ?? []}
           instructors={bootstrap?.instructors ?? []}
-          lessons={adminLessons}
+          batches={adminBatches.length > 0 ? adminBatches : (bootstrap?.batches ?? [])}
           onClose={() => setModalOpen(false)}
           onSaved={async (msg) => {
             await Promise.all([loadAdminCourses(), refreshBootstrap()]);

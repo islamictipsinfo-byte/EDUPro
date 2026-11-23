@@ -14,8 +14,14 @@ import type {
   CommunityPost,
   Coupon,
   Course,
+  CourseAnnouncement,
+  CourseAssignment,
   CourseBatch,
+  CourseCertificate,
+  CourseChapter,
   CourseLesson,
+  CourseModule,
+  AssignmentSubmission,
   Ebook,
   Enrollment,
   Exam,
@@ -69,7 +75,13 @@ export interface DatabaseState {
   instructors: Instructor[];
   courses: Course[];
   batches: CourseBatch[];
+  modules: CourseModule[];
+  chapters: CourseChapter[];
   lessons: CourseLesson[];
+  assignments: CourseAssignment[];
+  assignmentSubmissions: AssignmentSubmission[];
+  announcements: CourseAnnouncement[];
+  certificates: CourseCertificate[];
   exams: Exam[];
   examAttempts: ExamAttempt[];
   questionBank: QuestionBankItem[];
@@ -234,6 +246,7 @@ function createInitialState(): DatabaseState {
   const instructors: Instructor[] = [
     {
       id: 'inst-1',
+      userId: 'u-admin',
       name: 'Alomgir Hossain',
       subject: 'English Grammar & IELTS',
       roleTitle: 'Founder & Lead Mentor, Aloms English Center',
@@ -245,6 +258,7 @@ function createInitialState(): DatabaseState {
     },
     {
       id: 'inst-2',
+      userId: 'u-teacher',
       name: 'Mahmudul Hasan',
       subject: 'HSC & Admission English',
       roleTitle: 'Senior Lecturer, Academic English',
@@ -526,10 +540,79 @@ function createInitialState(): DatabaseState {
     },
   ];
 
+  const modules: CourseModule[] = [
+    {
+      id: 'mod-ssc-1',
+      courseId: 'crs-frpb-ssc',
+      title: 'Module 1: Core Grammar',
+      description: 'Foundational board grammar rules including Right Form of Verbs and Completing Sentences.',
+      orderIndex: 1,
+      status: 'published',
+    },
+    {
+      id: 'mod-ssc-2',
+      courseId: 'crs-frpb-ssc',
+      title: 'Module 2: Transformation',
+      description: 'Passage narration, transformation of sentences, and board writing templates.',
+      orderIndex: 2,
+      status: 'published',
+    },
+    {
+      id: 'mod-hsc-1',
+      courseId: 'crs-hsc-combo',
+      title: 'HSC 2nd Paper Grammar',
+      description: 'Modifiers, prepositions, and sentence connectors for board mastery.',
+      orderIndex: 1,
+      status: 'published',
+    },
+    {
+      id: 'mod-hsc-2',
+      courseId: 'crs-hsc-combo',
+      title: 'HSC 1st Paper Writing',
+      description: 'Flow charts, summary writing, and unseen passage strategy.',
+      orderIndex: 2,
+      status: 'published',
+    },
+    {
+      id: 'mod-ielts-1',
+      courseId: 'crs-ielts-pro',
+      title: 'Writing Module',
+      description: 'Task 1 data commentary and Task 2 Band 8 essay structure.',
+      orderIndex: 1,
+      status: 'published',
+    },
+  ];
+
+  const chapters: CourseChapter[] = [
+    {
+      id: 'chp-ssc-1',
+      courseId: 'crs-frpb-ssc',
+      moduleId: 'mod-ssc-1',
+      title: 'Board Grammar Essentials',
+      orderIndex: 1,
+    },
+    {
+      id: 'chp-ssc-2',
+      courseId: 'crs-frpb-ssc',
+      moduleId: 'mod-ssc-2',
+      title: 'Narration & Sentence Synthesis',
+      orderIndex: 1,
+    },
+    {
+      id: 'chp-hsc-1',
+      courseId: 'crs-hsc-combo',
+      moduleId: 'mod-hsc-1',
+      title: 'Modifiers & Connectors',
+      orderIndex: 1,
+    },
+  ];
+
   const lessons: CourseLesson[] = [
     {
       id: 'les-1',
       courseId: 'crs-frpb-ssc',
+      moduleId: 'mod-ssc-1',
+      chapterId: 'chp-ssc-1',
       batchId: 'bat-ssc-mpr-1',
       batchName: 'SSC-27 Mirpur Evening Batch A',
       lessonType: 'recorded',
@@ -542,11 +625,15 @@ function createInitialState(): DatabaseState {
       sheetSummary:
         'Covers subject-verb agreement, conditional triggers, modal passives, and past board question patterns from Dhaka & Rajshahi boards.',
       isFreePreview: true,
+      completionRequired: true,
+      status: 'published',
       orderIndex: 1,
     },
     {
       id: 'les-2',
       courseId: 'crs-frpb-ssc',
+      moduleId: 'mod-ssc-1',
+      chapterId: 'chp-ssc-1',
       batchId: 'bat-ssc-online-1',
       batchName: 'SSC-27 Nationwide Live Batch',
       lessonType: 'live',
@@ -562,11 +649,15 @@ function createInitialState(): DatabaseState {
       sheetSummary:
         'Live interactive workshop covering It is high time, Lest, No sooner had, Provided that, and student Q&A.',
       isFreePreview: false,
+      completionRequired: true,
+      status: 'published',
       orderIndex: 2,
     },
     {
       id: 'les-3',
       courseId: 'crs-frpb-ssc',
+      moduleId: 'mod-ssc-2',
+      chapterId: 'chp-ssc-2',
       batchId: 'bat-ssc-mpr-1',
       batchName: 'SSC-27 Mirpur Evening Batch A',
       lessonType: 'lecture_sheet',
@@ -579,11 +670,15 @@ function createInitialState(): DatabaseState {
       sheetSummary:
         'Complete rules for reporting verb shifts, universal truths, exclamation conversion, and 40 solved board passages.',
       isFreePreview: false,
+      completionRequired: true,
+      status: 'published',
       orderIndex: 3,
     },
     {
       id: 'les-4',
       courseId: 'crs-hsc-combo',
+      moduleId: 'mod-hsc-1',
+      chapterId: 'chp-hsc-1',
       batchId: 'bat-hsc-utr-1',
       batchName: 'HSC-27 Uttara Morning Batch',
       lessonType: 'recorded',
@@ -596,11 +691,14 @@ function createInitialState(): DatabaseState {
       sheetSummary:
         'Distinguishes participle, appositive, determiner, intensifier, and infinitive modifiers with 25 board examples.',
       isFreePreview: true,
+      completionRequired: true,
+      status: 'published',
       orderIndex: 1,
     },
     {
       id: 'les-5',
       courseId: 'crs-hsc-combo',
+      moduleId: 'mod-hsc-2',
       batchId: 'bat-hsc-utr-1',
       batchName: 'HSC-27 Uttara Morning Batch',
       lessonType: 'live',
@@ -615,11 +713,14 @@ function createInitialState(): DatabaseState {
       sheetSummary:
         'Gerund, infinitive, and noun phrase parallel structures for top marks in HSC 1st Paper Flow Charts.',
       isFreePreview: false,
+      completionRequired: true,
+      status: 'published',
       orderIndex: 2,
     },
     {
       id: 'les-6',
       courseId: 'crs-ielts-pro',
+      moduleId: 'mod-ielts-1',
       batchId: 'bat-ielts-1',
       batchName: 'IELTS Band 8.0 Weekend Live',
       lessonType: 'recorded',
@@ -632,9 +733,45 @@ function createInitialState(): DatabaseState {
       sheetSummary:
         'Thesis framing, PEEL paragraph development, cohesive devices without repetition, and lexical precision.',
       isFreePreview: true,
+      completionRequired: true,
+      status: 'published',
       orderIndex: 1,
     },
   ];
+
+  const assignments: CourseAssignment[] = [
+    {
+      id: 'asg-ssc-1',
+      courseId: 'crs-frpb-ssc',
+      batchId: 'bat-ssc-mpr-1',
+      title: 'Board Completing Sentences & Narration Drill Sheet 01',
+      instructions:
+        'Write 10 complete sentences using "It is high time", "Lest", "Provided that", and convert the passage narration exercise into indirect speech.',
+      dueDate: '2026-12-05',
+      maxMarks: 20,
+      createdByUserId: 'u-teacher',
+      createdByName: 'Mahmudul Hasan',
+      createdAt: '2026-03-01T10:00:00.000Z',
+    },
+  ];
+
+  const assignmentSubmissions: AssignmentSubmission[] = [];
+
+  const announcements: CourseAnnouncement[] = [
+    {
+      id: 'ann-ssc-1',
+      courseId: 'crs-frpb-ssc',
+      title: 'Weekly Model Test Schedule & Lecture Sheet Update',
+      message:
+        'Download the updated Right Form of Verbs PDF sheet before Friday 8:00 PM Live Doubt Solving session.',
+      pinned: true,
+      postedByUserId: 'u-teacher',
+      postedByName: 'Mahmudul Hasan',
+      createdAt: '2026-03-02T09:00:00.000Z',
+    },
+  ];
+
+  const certificates: CourseCertificate[] = [];
 
   const exams: Exam[] = [
     {
@@ -1184,7 +1321,13 @@ function createInitialState(): DatabaseState {
     instructors,
     courses,
     batches,
+    modules,
+    chapters,
     lessons,
+    assignments,
+    assignmentSubmissions,
+    announcements,
+    certificates,
     exams,
     examAttempts,
     questionBank: ext.questionBank,
@@ -1356,10 +1499,47 @@ export function getDb(): DatabaseState {
         ...s,
         active: s.active !== false,
       }));
+      parsed.instructors = (parsed.instructors ?? fallback.instructors).map((inst) => {
+        if (inst.userId) return inst;
+        if (inst.id === 'inst-1') return { ...inst, userId: 'u-admin' };
+        if (inst.id === 'inst-2') return { ...inst, userId: 'u-teacher' };
+        return inst;
+      });
+      parsed.courses = (parsed.courses ?? fallback.courses).map((c) => ({
+        ...c,
+        visibility: c.visibility ?? 'public',
+        enrollmentAvailability: c.enrollmentAvailability ?? 'open',
+      }));
       parsed.lessons = (parsed.lessons ?? []).map((l) => ({
         ...l,
         lessonType: l.lessonType ?? 'recorded',
+        status: l.status ?? 'published',
+        completionRequired: l.completionRequired !== false,
       }));
+      if (!Array.isArray(parsed.modules) || parsed.modules.length === 0) {
+        const modMap = new Map<string, CourseModule>();
+        for (const l of parsed.lessons) {
+          const modName = (l.moduleName || 'Module 1: Core Curriculum').trim();
+          const key = `${l.courseId}::${modName.toLowerCase()}`;
+          if (!modMap.has(key)) {
+            const countInCourse = Array.from(modMap.values()).filter((m) => m.courseId === l.courseId).length;
+            modMap.set(key, {
+              id: `mod-${l.courseId}-${countInCourse + 1}`,
+              courseId: l.courseId,
+              title: modName,
+              orderIndex: countInCourse + 1,
+              status: 'published',
+            });
+          }
+          l.moduleId = modMap.get(key)!.id;
+        }
+        parsed.modules = Array.from(modMap.values());
+      }
+      if (!Array.isArray(parsed.chapters)) parsed.chapters = fallback.chapters;
+      if (!Array.isArray(parsed.assignments)) parsed.assignments = fallback.assignments;
+      if (!Array.isArray(parsed.assignmentSubmissions)) parsed.assignmentSubmissions = [];
+      if (!Array.isArray(parsed.announcements)) parsed.announcements = fallback.announcements;
+      if (!Array.isArray(parsed.certificates)) parsed.certificates = [];
       parsed.ebooks = (parsed.ebooks ?? []).map((eb) => ({
         ...eb,
         status: eb.status ?? 'active',

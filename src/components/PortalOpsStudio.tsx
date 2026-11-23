@@ -532,6 +532,7 @@ export function ExamBankPanel({
  * 2. CATALOG & CONTENT STUDIO (E-BOOKS, PRODUCTS, INSTRUCTORS, CATEGORIES, POSTS, COUPONS)
  * ========================================================================== */
 interface CatalogContentPanelProps extends RefreshProps {
+  role?: UserRole;
   ebooks: Ebook[];
   products: Product[];
   instructors: Instructor[];
@@ -545,6 +546,7 @@ interface CatalogContentPanelProps extends RefreshProps {
 }
 
 export function CatalogContentPanel({
+  role = 'admin',
   ebooks,
   products,
   instructors,
@@ -559,16 +561,18 @@ export function CatalogContentPanel({
   onNotify,
 }: CatalogContentPanelProps) {
   const { apiFetch } = useAuth();
+  const isTeacher = role === 'teacher';
+  const safeInitial = isTeacher && initialSubTab !== 'ebooks' && initialSubTab !== 'posts' ? 'ebooks' : initialSubTab;
   const [subTab, setSubTab] = useState<
     'ebooks' | 'products' | 'instructors' | 'categories' | 'posts' | 'coupons'
-  >(initialSubTab);
+  >(safeInitial);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialSubTab) {
-      setSubTab(initialSubTab);
+      setSubTab(isTeacher && initialSubTab !== 'ebooks' && initialSubTab !== 'posts' ? 'ebooks' : initialSubTab);
     }
-  }, [initialSubTab]);
+  }, [initialSubTab, isTeacher]);
 
   // Ebook form + edit state
   const [editingEbookId, setEditingEbookId] = useState<string | null>(null);
@@ -707,14 +711,20 @@ export function CatalogContentPanel({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
-        {[
-          { id: 'ebooks' as const, label: `E-Books & PDFs (${ebooks.length})` },
-          { id: 'products' as const, label: `Products (${products.length})` },
-          { id: 'instructors' as const, label: `Instructors (${instructors.length})` },
-          { id: 'categories' as const, label: `Categories (${categories.length})` },
-          { id: 'posts' as const, label: `Posts & Course Converter (${posts.length})` },
-          { id: 'coupons' as const, label: `Coupons (${coupons.length})` },
-        ].map((tab) => (
+        {(isTeacher
+          ? [
+              { id: 'ebooks' as const, label: `E-Books & PDFs (${ebooks.length})` },
+              { id: 'posts' as const, label: `Community Posts (${posts.length})` },
+            ]
+          : [
+              { id: 'ebooks' as const, label: `E-Books & PDFs (${ebooks.length})` },
+              { id: 'products' as const, label: `Products (${products.length})` },
+              { id: 'instructors' as const, label: `Instructors (${instructors.length})` },
+              { id: 'categories' as const, label: `Categories (${categories.length})` },
+              { id: 'posts' as const, label: `Posts & Course Converter (${posts.length})` },
+              { id: 'coupons' as const, label: `Coupons (${coupons.length})` },
+            ]
+        ).map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -974,16 +984,18 @@ export function CatalogContentPanel({
                     <Pencil className="h-3.5 w-3.5" />
                     <span>Edit</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void softDelete('/api/portal/ebooks', eb.id, eb.title)}
-                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                      confirmId === eb.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
-                    }`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {confirmId === eb.id && <span>Confirm</span>}
-                  </button>
+                  {!isTeacher && (
+                    <button
+                      type="button"
+                      onClick={() => void softDelete('/api/portal/ebooks', eb.id, eb.title)}
+                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
+                        confirmId === eb.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
+                      }`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {confirmId === eb.id && <span>Confirm</span>}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1715,16 +1727,18 @@ export function CatalogContentPanel({
                     <Pencil className="h-3.5 w-3.5" />
                     <span>Edit</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void softDelete('/api/portal/posts', p.id, p.title)}
-                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                      confirmId === p.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
-                    }`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {confirmId === p.id && <span>Confirm</span>}
-                  </button>
+                  {!isTeacher && (
+                    <button
+                      type="button"
+                      onClick={() => void softDelete('/api/portal/posts', p.id, p.title)}
+                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
+                        confirmId === p.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
+                      }`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {confirmId === p.id && <span>Confirm</span>}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1924,29 +1938,33 @@ export function AttendanceFinancePanel({
           <UserCheck className="h-3.5 w-3.5" />
           <span>Regular Attendance ({attendance.length})</span>
         </button>
+        {(canManageFinance || role === 'teacher') && (
+          <button
+            type="button"
+            onClick={() => setTab('payroll')}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold ${
+              tab === 'payroll' ? 'bg-[#062436] text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Wallet className="h-3.5 w-3.5" />
+            <span>
+              {canManageFinance
+                ? `Teacher & Staff Payroll (${payrolls.length})`
+                : `My Salary Slips (${payrolls.length})`}
+            </span>
+          </button>
+        )}
         {canManageFinance && (
-          <>
-            <button
-              type="button"
-              onClick={() => setTab('payroll')}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold ${
-                tab === 'payroll' ? 'bg-[#062436] text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Wallet className="h-3.5 w-3.5" />
-              <span>Teacher & Staff Payroll ({payrolls.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('finance')}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold ${
-                tab === 'finance' ? 'bg-[#062436] text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Coins className="h-3.5 w-3.5" />
-              <span>Finance P&L & Invoices</span>
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => setTab('finance')}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold ${
+              tab === 'finance' ? 'bg-[#062436] text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Coins className="h-3.5 w-3.5" />
+            <span>Finance P&amp;L &amp; Invoices</span>
+          </button>
         )}
       </div>
 
@@ -2070,14 +2088,15 @@ export function AttendanceFinancePanel({
       )}
 
       {/* PAYROLL */}
-      {tab === 'payroll' && canManageFinance && (
+      {tab === 'payroll' && (canManageFinance || role === 'teacher') && (
         <div className="space-y-6">
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setPayErr(null);
-              try {
-                await apiFetch('/api/portal/payroll', {
+          {canManageFinance && (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setPayErr(null);
+                try {
+                  await apiFetch('/api/portal/payroll', {
                   method: 'POST',
                   body: JSON.stringify({
                     employeeId: empId,
@@ -2173,46 +2192,53 @@ export function AttendanceFinancePanel({
               Generate Payroll Sheet
             </button>
           </form>
+          )}
 
-          <div className="space-y-2.5">
-            {payrolls.map((pr) => (
-              <div
-                key={pr.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-xs"
-              >
-                <div>
-                  <p className="text-sm font-bold text-slate-900">
-                    {pr.employeeName} · {pr.monthKey}
-                  </p>
-                  <p className="font-mono-tabular text-slate-500">
-                    Base ৳{pr.baseSalary} + Bonus ৳{pr.bonuses} = Net{' '}
-                    <strong className="text-slate-900">৳{pr.netSalary.toLocaleString()}</strong>
-                  </p>
+          {payrolls.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-500">
+              No payroll slips recorded yet.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {payrolls.map((pr) => (
+                <div
+                  key={pr.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-xs"
+                >
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">
+                      {pr.employeeName} · {pr.monthKey}
+                    </p>
+                    <p className="font-mono-tabular text-slate-500">
+                      Base ৳{pr.baseSalary} + Bonus ৳{pr.bonuses} = Net{' '}
+                      <strong className="text-slate-900">৳{pr.netSalary.toLocaleString()}</strong>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-bold uppercase text-slate-700">
+                      {pr.status}
+                    </span>
+                    {canManageFinance && pr.status !== 'paid' && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await apiFetch(`/api/portal/payroll/${pr.id}`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ status: 'paid' }),
+                          });
+                          await onRefresh();
+                          onNotify(`Salary marked Paid for ${pr.employeeName} & logged to Finance Expense.`);
+                        }}
+                        className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white hover:bg-emerald-700"
+                      >
+                        Mark Paid
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-bold uppercase text-slate-700">
-                    {pr.status}
-                  </span>
-                  {pr.status !== 'paid' && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await apiFetch(`/api/portal/payroll/${pr.id}`, {
-                          method: 'PATCH',
-                          body: JSON.stringify({ status: 'paid' }),
-                        });
-                        await onRefresh();
-                        onNotify(`Salary marked Paid for ${pr.employeeName} & logged to Finance Expense.`);
-                      }}
-                      className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white hover:bg-emerald-700"
-                    >
-                      Mark Paid
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

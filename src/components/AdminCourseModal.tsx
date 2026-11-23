@@ -13,7 +13,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { calculateDiscountedPrice } from '../lib/domain';
-import type { Branch, Course, CourseLesson, Instructor, LessonType } from '../types';
+import type { Branch, Course, CourseLesson, CourseStatus, Instructor, LessonType } from '../types';
 import { ImageUploadField } from './ImageUploadField';
 
 interface AdminCourseModalProps {
@@ -79,7 +79,7 @@ export function AdminCourseModal({
   const [subtitle, setSubtitle] = useState('');
   const [category, setCategory] = useState<Course['category']>('HSC English');
   const [levelTag, setLevelTag] = useState('HSC 27');
-  const [status, setStatus] = useState<'active' | 'draft'>('active');
+  const [status, setStatus] = useState<CourseStatus>('active');
   const [isCombo, setIsCombo] = useState(false);
   const [includedCourses, setIncludedCourses] = useState<string[]>([]);
   const [newSubCourse, setNewSubCourse] = useState('');
@@ -453,7 +453,7 @@ export function AdminCourseModal({
                     <select
                       id="cs-status"
                       value={status}
-                      onChange={(e) => setStatus(e.target.value as 'active' | 'draft')}
+                      onChange={(e) => setStatus(e.target.value as CourseStatus)}
                       className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm"
                     >
                       <option value="active">Active (Live on /courses)</option>

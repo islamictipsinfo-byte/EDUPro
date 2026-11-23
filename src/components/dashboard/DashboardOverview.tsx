@@ -33,6 +33,7 @@ import { SystemActivityLogsPanel } from './SystemActivityLogsPanel';
 
 interface DashboardOverviewProps {
   data: DashboardSourceData;
+  viewerName?: string;
   auditLogs?: AuditLogEntry[];
   searchQuery: string;
   overviewSubView: OverviewSubView;
@@ -47,6 +48,7 @@ interface DashboardOverviewProps {
 
 export function DashboardOverview({
   data,
+  viewerName,
   auditLogs = [],
   searchQuery,
   lang,
@@ -125,20 +127,38 @@ export function DashboardOverview({
 
               <div>
                 <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-                  {cfg.heroTitle}
+                  {data.role !== 'admin' && cfg.heroTitle === DEFAULT_DASHBOARD_CONFIG.heroTitle
+                    ? `Welcome Back, ${viewerName?.split(' ')[0] || 'Member'}!`
+                    : cfg.heroTitle}
                 </h1>
                 <p className="mt-0.5 text-sm font-bold text-cyan-100">{cfg.heroSubtitle}</p>
                 <p className="mt-1 text-xs italic text-blue-100/90">{cfg.heroQuote}</p>
                 <button
                   type="button"
-                  onClick={() => onSelectSection(cfg.heroCtaSection)}
+                  onClick={() =>
+                    onSelectSection(
+                      data.role === 'teacher'
+                        ? 'enrollments'
+                        : data.role === 'student'
+                          ? 'my_learning'
+                          : data.role === 'guardian'
+                            ? 'guardian_monitor'
+                            : cfg.heroCtaSection
+                    )
+                  }
                   style={{
                     backgroundColor: cfg.colors.heroButtonBg,
                     color: cfg.colors.heroButtonText,
                   }}
                   className="mt-3.5 inline-flex items-center gap-1.5 rounded-full px-5 py-2 text-xs font-extrabold shadow-md transition-transform hover:-translate-y-0.5 hover:opacity-95"
                 >
-                  <span>{cfg.heroCtaLabel}</span>
+                  <span>
+                    {data.role === 'teacher'
+                      ? 'Open Student Roster'
+                      : data.role === 'student'
+                        ? 'My Learning Hub'
+                        : cfg.heroCtaLabel}
+                  </span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>

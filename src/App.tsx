@@ -18,6 +18,7 @@ import { PortalPage } from './pages/PortalPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { ResultPage } from './pages/ResultPage';
 import { AboutPage, ContactPage, PolicyPage } from './pages/StaticPages';
+import { VerifyCertificatePage } from './pages/VerifyCertificatePage';
 
 function CustomCmsPage({ slug }: { slug: string }) {
   const { bootstrap } = useAuth();
@@ -96,9 +97,18 @@ function RouterShell() {
 
   if (pathname === '/courses') {
     pageNode = <CoursesPage navigate={navigate} initialCategory={catParam} />;
-  } else if (pathname.startsWith('/course/')) {
-    const slug = pathname.replace('/course/', '');
+  } else if (pathname.startsWith('/course/') || pathname.startsWith('/courses/')) {
+    const slug = pathname.startsWith('/courses/')
+      ? pathname.replace('/courses/', '')
+      : pathname.replace('/course/', '');
     pageNode = <CourseDetailPage slug={slug} navigate={navigate} />;
+  } else if (pathname === '/verify-certificate') {
+    pageNode = (
+      <VerifyCertificatePage
+        initialCertNo={url.searchParams.get('cert') || ''}
+        navigate={navigate}
+      />
+    );
   } else if (pathname === '/learn') {
     pageNode = <LearnPage navigate={navigate} />;
   } else if (pathname === '/instructors') {
@@ -133,6 +143,23 @@ function RouterShell() {
   }
 
   const isPortalShell = pathname === '/portal' || pathname === '/dashboard';
+
+  useEffect(() => {
+    const isPrivate =
+      pathname.startsWith('/portal') ||
+      pathname.startsWith('/dashboard') ||
+      pathname.startsWith('/learn') ||
+      pathname.startsWith('/login');
+    let robots = document.querySelector<HTMLMetaElement>("meta[name='robots']");
+    if (!robots) {
+      robots = document.createElement('meta');
+      robots.name = 'robots';
+      document.head.appendChild(robots);
+    }
+    if (!pathname.startsWith('/course/') && !pathname.startsWith('/courses/')) {
+      robots.content = isPrivate ? 'noindex,nofollow' : 'index,follow';
+    }
+  }, [pathname]);
 
   if (isPortalShell) {
     return (

@@ -98,7 +98,13 @@ test('canRoleAccessPortalSection enforces strict multi-role RBAC boundaries', ()
   assert.equal(canRoleAccessPortalSection('branch_manager', 'enrollments'), true);
   assert.equal(canRoleAccessPortalSection('branch_manager', 'settings'), false);
   assert.equal(canRoleAccessPortalSection('teacher', 'exams'), true);
+  assert.equal(canRoleAccessPortalSection('teacher', 'courses'), true);
+  assert.equal(canRoleAccessPortalSection('teacher', 'catalog_cms'), true);
+  assert.equal(canRoleAccessPortalSection('teacher', 'attendance_finance'), true);
+  assert.equal(canRoleAccessPortalSection('teacher', 'ai_ecosystem'), true);
+  assert.equal(canRoleAccessPortalSection('teacher', 'enrollments'), true);
   assert.equal(canRoleAccessPortalSection('teacher', 'branches'), false);
+  assert.equal(canRoleAccessPortalSection('teacher', 'users'), false);
   assert.equal(canRoleAccessPortalSection('student', 'my_learning'), true);
   assert.equal(canRoleAccessPortalSection('student', 'users'), false);
   assert.equal(canRoleAccessPortalSection('guardian', 'guardian_monitor'), true);
@@ -108,6 +114,11 @@ test('canRoleAccessPortalSection enforces strict multi-role RBAC boundaries', ()
   assert.equal(canRoleAccessPortalSection('teacher', 'activity_logs'), false);
   assert.equal(canRoleAccessPortalSection('student', 'activity_logs'), false);
   assert.equal(canRoleAccessPortalSection('guardian', 'activity_logs'), false);
+  assert.equal(canRoleAccessPortalSection('admin', 'profile'), true);
+  assert.equal(canRoleAccessPortalSection('branch_manager', 'profile'), true);
+  assert.equal(canRoleAccessPortalSection('teacher', 'profile'), true);
+  assert.equal(canRoleAccessPortalSection('student', 'profile'), true);
+  assert.equal(canRoleAccessPortalSection('guardian', 'profile'), true);
 });
 
 test('filterCourses filters active courses by category, combo flag, levelTag, drafts, and sort', () => {

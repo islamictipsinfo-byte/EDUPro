@@ -22,11 +22,16 @@ export interface User {
   rollNumber?: string;
   guardianLinkedStudentIds?: string[];
   avatar?: string;
+  status?: 'active' | 'suspended';
+  bio?: string;
+  subjectSpecialty?: string;
+  lastLoginAt?: string;
   createdAt: string;
 }
 
 export interface Instructor {
   id: string;
+  userId?: string;
   name: string;
   subject: string;
   roleTitle: string;
@@ -37,8 +42,52 @@ export interface Instructor {
   avatar: string;
 }
 
-export type LessonType = 'recorded' | 'live' | 'lecture_sheet';
+export type LessonType =
+  | 'recorded'
+  | 'video'
+  | 'text'
+  | 'audio'
+  | 'lecture_sheet'
+  | 'pdf_notes'
+  | 'document'
+  | 'external'
+  | 'quiz'
+  | 'assignment'
+  | 'live'
+  | 'practice_test';
+
 export type LiveClassStatus = 'scheduled' | 'live_now' | 'ended';
+
+export type CourseStatus = 'draft' | 'published' | 'active' | 'unpublished' | 'archived';
+export type CourseLevel = 'Beginner' | 'Intermediate' | 'Advanced';
+export type CourseDeliveryType = 'Offline' | 'Online' | 'Hybrid';
+export type CourseVisibility = 'public' | 'unlisted' | 'private';
+export type EnrollmentAvailability = 'open' | 'closed' | 'upcoming';
+
+export interface CourseResource {
+  id: string;
+  title: string;
+  url: string;
+  kind: 'pdf' | 'document' | 'audio' | 'external' | 'slides';
+  fileSize?: string;
+}
+
+export interface CourseModule {
+  id: string;
+  courseId: string;
+  title: string;
+  description?: string;
+  orderIndex: number;
+  status?: 'draft' | 'published';
+}
+
+export interface CourseChapter {
+  id: string;
+  courseId: string;
+  moduleId: string;
+  title: string;
+  orderIndex: number;
+}
 
 export interface CourseBatch {
   id: string;
@@ -48,7 +97,10 @@ export interface CourseBatch {
   branchId: string;
   instructorId: string;
   schedule: string;
+  classDurationMinutes?: number;
+  classroomOrMeeting?: string;
   startDate: string;
+  endDate?: string;
   seatLimit: number;
   enrolledSeats: number;
   mode: 'Online Live' | 'Offline Branch' | 'Hybrid';
@@ -58,21 +110,54 @@ export interface CourseBatch {
 export interface CourseLesson {
   id: string;
   courseId: string;
+  moduleId?: string;
+  chapterId?: string;
   batchId?: string | null;
   batchName?: string;
   lessonType: LessonType;
   title: string;
   moduleName: string;
+  chapterName?: string;
   duration: string;
   videoPreviewTitle: string;
   videoUrl: string;
+  audioUrl?: string;
+  textContent?: string;
   lectureSheetUrl?: string;
+  externalUrl?: string;
+  resources?: CourseResource[];
+  linkedExamId?: string;
+  linkedAssignmentId?: string;
   liveJoinUrl?: string;
   liveStatus?: LiveClassStatus;
   scheduledAt?: string;
   sheetSummary: string;
   isFreePreview: boolean;
+  completionRequired?: boolean;
+  sequentialLock?: boolean;
+  status?: 'draft' | 'published';
   orderIndex: number;
+}
+
+export interface CertificateCriteria {
+  enabled: boolean;
+  minProgressPercent: number;
+  requireExamPass: boolean;
+  minExamPercent?: number;
+  requireAssignmentCompletion: boolean;
+}
+
+export interface CourseSeoConfig {
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
+  focusKeyword?: string;
+  canonicalUrl?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  robotsIndex?: boolean;
+  noIndex?: boolean;
 }
 
 export interface Course {
@@ -82,21 +167,122 @@ export interface Course {
   subtitle: string;
   category: 'HSC English' | 'SSC English' | 'IELTS & Spoken' | 'Grammar Pro' | 'Admission' | 'Combo Packs';
   levelTag: string;
+  level?: CourseLevel;
+  language?: string;
+  tags?: string[];
   isCombo: boolean;
   includedCourses?: string[];
   price: number;
   originalPrice: number;
+  admissionFee?: number;
+  isFree?: boolean;
+  installmentEnabled?: boolean;
+  installmentCount?: number;
+  installmentOptions?: string;
+  paymentPolicy?: string;
+  couponEligible?: boolean;
   enrolledCount: number;
   examSystemIncluded: boolean;
   branchIds: string[];
   instructorIds: string[];
+  createdByUserId?: string;
   thumbnail: string;
+  bannerImage?: string;
   description: string;
   highlights: string[];
+  prerequisites?: string[];
+  learningOutcomes?: string[];
+  targetAudience?: string[];
   demoVideoTitle: string;
   demoYoutubeUrl: string;
-  status: 'active' | 'draft';
+  courseType?: CourseDeliveryType;
+  durationLabel?: string;
+  totalClasses?: number;
+  estimatedHours?: number;
+  maxCapacity?: number;
+  minEnrollment?: number;
+  startDate?: string;
+  endDate?: string;
+  enrollmentStartDate?: string;
+  enrollmentDeadline?: string;
+  status: CourseStatus;
+  featured?: boolean;
+  visibility?: CourseVisibility;
+  enrollmentAvailability?: EnrollmentAvailability;
+  sequentialAccess?: boolean;
+  certificateCriteria?: CertificateCriteria;
+  seo?: CourseSeoConfig;
   sourcePostId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CourseAssignment {
+  id: string;
+  courseId: string;
+  batchId?: string | null;
+  lessonId?: string;
+  title: string;
+  instructions: string;
+  maxMarks: number;
+  dueDate?: string;
+  attachmentUrl?: string;
+  createdByUserId: string;
+  createdByName?: string;
+  createdAt: string;
+}
+
+export interface AssignmentSubmission {
+  id: string;
+  assignmentId: string;
+  courseId: string;
+  userId: string;
+  studentName: string;
+  studentEmail: string;
+  answerText?: string;
+  submissionText?: string;
+  attachmentUrl?: string;
+  marks?: number;
+  feedback?: string;
+  status: 'submitted' | 'graded' | 'resubmit_requested';
+  gradedBy?: string;
+  gradedAt?: string;
+  submittedAt: string;
+}
+
+export interface CourseAnnouncement {
+  id: string;
+  courseId: string;
+  batchId?: string | null;
+  title: string;
+  message: string;
+  pinned?: boolean;
+  postedByUserId?: string;
+  postedByName?: string;
+  authorId?: string;
+  authorName?: string;
+  authorRole?: UserRole;
+  createdAt: string;
+}
+
+export interface CourseCertificate {
+  id: string;
+  certificateNumber: string;
+  certificateNo?: string;
+  courseId: string;
+  courseTitle: string;
+  courseSlug?: string;
+  userId: string;
+  studentName: string;
+  studentEmail: string;
+  rollNumber?: string;
+  completionPercent: number;
+  progressPercent?: number;
+  examScorePercent?: number;
+  instructorName?: string;
+  issuedAt: string;
+  issuedBy?: string;
+  revoked?: boolean;
 }
 
 export interface ExamQuestion {
@@ -149,6 +335,9 @@ export interface ExamAttempt {
   grade: string;
   passed: boolean;
   answers: Record<string, number>;
+  teacherFeedback?: string;
+  gradedBy?: string;
+  gradedAt?: string;
   submittedAt: string;
 }
 
@@ -225,6 +414,15 @@ export interface PublicPaymentGateway {
   sortOrder: number;
 }
 
+export interface EnrollmentHistoryEntry {
+  id?: string;
+  at?: string;
+  createdAt?: string;
+  action: string;
+  actorName: string;
+  note: string;
+}
+
 export interface Enrollment {
   id: string;
   userId: string;
@@ -233,13 +431,19 @@ export interface Enrollment {
   courseId: string;
   courseTitle: string;
   branchId: string;
+  batchId?: string | null;
+  batchName?: string;
   paymentMethod: PaymentGatewayType | 'Card';
   trxId?: string;
   invoiceNo?: string;
   amountPaid: number;
+  refundAmount?: number;
+  refundReason?: string;
   couponUsed?: string;
-  status: 'approved' | 'pending' | 'rejected';
+  status: 'approved' | 'pending' | 'rejected' | 'cancelled' | 'transferred' | 'expired';
+  expiresAt?: string | null;
   completedLessonIds: string[];
+  history?: EnrollmentHistoryEntry[];
   enrolledAt: string;
 }
 
@@ -272,6 +476,8 @@ export interface Coupon {
 
 export interface Review {
   id: string;
+  courseId?: string;
+  userId?: string;
   name: string;
   roleLabel: string;
   text: string;

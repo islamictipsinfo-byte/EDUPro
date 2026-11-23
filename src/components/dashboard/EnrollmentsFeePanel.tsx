@@ -1,8 +1,11 @@
 import {
+  ArrowRightLeft,
+  Ban,
   CheckCircle2,
   Clock,
   CreditCard,
   Download,
+  History,
   Pencil,
   Plus,
   RotateCcw,
@@ -14,7 +17,8 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { filterActiveBranches } from '../../lib/domain';
+import { isCourseStatusLive } from '../../lib/courseEnterprise';
+import { computeBatchSeatUsage, filterActiveBranches } from '../../lib/domain';
 import {
   computeEnrollmentMetrics,
   filterEnrollments,
@@ -23,6 +27,7 @@ import {
 import type {
   Branch,
   Course,
+  CourseBatch,
   Enrollment,
   PaymentGatewayConfig,
   PaymentGatewayType,
@@ -35,6 +40,7 @@ interface EnrollmentsFeePanelProps {
   userBranchId?: string | null;
   enrollments: Enrollment[];
   courses: Course[];
+  batches?: CourseBatch[];
   branches: Branch[];
   users?: User[];
   paymentGateways?: PaymentGatewayConfig[];
@@ -57,6 +63,7 @@ export function EnrollmentsFeePanel({
   userBranchId,
   enrollments,
   courses,
+  batches = [],
   branches,
   users = [],
   paymentGateways = [],
@@ -83,13 +90,31 @@ export function EnrollmentsFeePanel({
   const [studentName, setStudentName] = useState('');
   const [studentEmail, setStudentEmail] = useState('');
   const [courseId, setCourseId] = useState('');
+  const [batchId, setBatchId] = useState('');
   const [branchId, setBranchId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<string>('bKash');
   const [amountPaid, setAmountPaid] = useState('0');
   const [trxId, setTrxId] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
   const [status, setStatus] = useState<Enrollment['status']>('pending');
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  // Enterprise Action Modals: Transfer, Cancel & Refund, History
+  const [transferEnr, setTransferEnr] = useState<Enrollment | null>(null);
+  const [transferCourseId, setTransferCourseId] = useState('');
+  const [transferBatchId, setTransferBatchId] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferErr, setTransferErr] = useState<string | null>(null);
+
+  const [refundEnr, setRefundEnr] = useState<Enrollment | null>(null);
+  const [refundAmount, setRefundAmount] = useState('0');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundBusy, setRefundBusy] = useState(false);
+  const [refundErr, setRefundErr] = useState<string | null>(null);
+
+  const [historyEnr, setHistoryEnr] = useState<Enrollment | null>(null);
 
   const activeBranches = useMemo(() => filterActiveBranches(branches), [branches]);
   const branchNameMap = useMemo(
@@ -127,20 +152,25 @@ export function EnrollmentsFeePanel({
   );
 
   const openCreateModal = () => {
-    const defaultCourse = courses.find((c) => c.status === 'active') || courses[0];
+    const defaultCourse = courses.find((c) => isCourseStatusLive(c.status)) || courses[0];
     const defaultBranch =
       role === 'branch_manager' && userBranchId
         ? userBranchId
         : activeBranches[0]?.id || branches[0]?.id || 'online';
+    const defaultBatch = batches.find(
+      (b) => b.courseId === defaultCourse?.id && b.status !== 'closed' && !computeBatchSeatUsage(b).isFull
+    );
     setEditingEnr(null);
     setSelectedUserId('');
     setStudentName('');
     setStudentEmail('');
     setCourseId(defaultCourse?.id || '');
+    setBatchId(defaultBatch?.id || '');
     setBranchId(defaultBranch);
     setPaymentMethod(methodOptions[0] || 'bKash');
     setAmountPaid(String(defaultCourse?.price ?? 0));
     setTrxId('');
+    setExpiresAt('');
     setStatus('pending');
     setModalError(null);
     setModalOpen(true);
@@ -152,10 +182,12 @@ export function EnrollmentsFeePanel({
     setStudentName(enr.studentName);
     setStudentEmail(enr.studentEmail);
     setCourseId(enr.courseId);
+    setBatchId(enr.batchId || '');
     setBranchId(enr.branchId);
     setPaymentMethod(enr.paymentMethod);
     setAmountPaid(String(enr.amountPaid));
     setTrxId(enr.trxId || '');
+    setExpiresAt(enr.expiresAt ? enr.expiresAt.slice(0, 10) : '');
     setStatus(enr.status);
     setModalError(null);
     setModalOpen(true);
@@ -218,10 +250,12 @@ export function EnrollmentsFeePanel({
         studentName: studentName.trim(),
         studentEmail: studentEmail.trim(),
         courseId,
+        batchId: batchId || null,
         branchId,
         paymentMethod,
         amountPaid: parsedAmount,
         trxId: trxId.trim() || undefined,
+        expiresAt: expiresAt ? expiresAt : null,
         status,
       };
       if (editingEnr) {
@@ -243,6 +277,53 @@ export function EnrollmentsFeePanel({
       setModalError(err instanceof Error ? err.message : 'Failed to save enrollment.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferEnr) return;
+    setTransferBusy(true);
+    setTransferErr(null);
+    try {
+      await apiFetch(`/api/portal/enrollments/${transferEnr.id}/transfer`, {
+        method: 'POST',
+        body: JSON.stringify({
+          targetCourseId: transferCourseId,
+          targetBatchId: transferBatchId || null,
+          reason: transferReason.trim() || 'Administrative course/batch transfer',
+        }),
+      });
+      onNotify(`Transferred "${transferEnr.studentName}" successfully.`);
+      setTransferEnr(null);
+      await onRefresh();
+    } catch (err) {
+      setTransferErr(err instanceof Error ? err.message : 'Transfer failed.');
+    } finally {
+      setTransferBusy(false);
+    }
+  };
+
+  const handleRefundSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refundEnr) return;
+    setRefundBusy(true);
+    setRefundErr(null);
+    try {
+      await apiFetch(`/api/portal/enrollments/${refundEnr.id}/cancel-refund`, {
+        method: 'POST',
+        body: JSON.stringify({
+          refundAmount: Math.max(0, Number(refundAmount) || 0),
+          reason: refundReason.trim() || 'Cancelled upon admin/student request',
+        }),
+      });
+      onNotify(`Cancelled enrollment for "${refundEnr.studentName}" and recorded refund.`);
+      setRefundEnr(null);
+      await onRefresh();
+    } catch (err) {
+      setRefundErr(err instanceof Error ? err.message : 'Cancel & refund failed.');
+    } finally {
+      setRefundBusy(false);
     }
   };
 
@@ -366,6 +447,14 @@ export function EnrollmentsFeePanel({
                 { id: 'pending', label: `Pending (${metrics.pendingCount})` },
                 { id: 'approved', label: `Approved (${metrics.approvedCount})` },
                 { id: 'rejected', label: `Rejected (${metrics.rejectedCount})` },
+                {
+                  id: 'cancelled',
+                  label: `Cancelled (${enrollments.filter((e) => e.status === 'cancelled').length})`,
+                },
+                {
+                  id: 'expired',
+                  label: `Expired (${enrollments.filter((e) => e.status === 'expired').length})`,
+                },
               ] as const
             ).map((tab) => {
               const active = statusFilter === tab.id;
@@ -482,8 +571,14 @@ export function EnrollmentsFeePanel({
                       </td>
                       <td className="px-3 py-3 text-xs">
                         <p className="font-semibold">{enr.courseTitle}</p>
+                        {enr.batchName && (
+                          <p className="mt-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-300">
+                            Batch: {enr.batchName}
+                          </p>
+                        )}
                         <p className="mt-0.5 text-[11px] opacity-60">
                           {new Date(enr.enrolledAt).toLocaleDateString()}
+                          {enr.expiresAt ? ` · Exp: ${enr.expiresAt.slice(0, 10)}` : ''}
                         </p>
                       </td>
                       <td className="px-3 py-3 text-xs">
@@ -499,6 +594,11 @@ export function EnrollmentsFeePanel({
                       </td>
                       <td className="font-mono-tabular px-3 py-3 font-bold">
                         <p>৳{enr.amountPaid}</p>
+                        {typeof enr.refundAmount === 'number' && enr.refundAmount > 0 && (
+                          <span className="block text-[10px] font-bold text-rose-600">
+                            Refunded: ৳{enr.refundAmount}
+                          </span>
+                        )}
                         {enr.couponUsed && (
                           <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                             Code: {enr.couponUsed}
@@ -525,6 +625,9 @@ export function EnrollmentsFeePanel({
                             <option value="approved">APPROVED</option>
                             <option value="pending">PENDING</option>
                             <option value="rejected">REJECTED</option>
+                            <option value="cancelled">CANCELLED</option>
+                            <option value="transferred">TRANSFERRED</option>
+                            <option value="expired">EXPIRED</option>
                           </select>
                         ) : (
                           <span
@@ -592,6 +695,62 @@ export function EnrollmentsFeePanel({
                             >
                               <Pencil className="h-3 w-3" />
                               <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => {
+                                setTransferEnr(enr);
+                                setTransferCourseId(enr.courseId);
+                                setTransferBatchId(enr.batchId || '');
+                                setTransferReason('');
+                                setTransferErr(null);
+                              }}
+                              aria-label={`Transfer enrollment for ${enr.studentName}`}
+                              title="Transfer Course or Batch"
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold transition-colors disabled:opacity-50 ${
+                                darkMode
+                                  ? 'border-[#253763] bg-[#09122B] text-sky-300 hover:bg-[#132347]'
+                                  : 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
+                              }`}
+                            >
+                              <ArrowRightLeft className="h-3 w-3" />
+                              <span>Transfer</span>
+                            </button>
+                            {enr.status !== 'cancelled' && (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => {
+                                  setRefundEnr(enr);
+                                  setRefundAmount(String(enr.amountPaid));
+                                  setRefundReason('');
+                                  setRefundErr(null);
+                                }}
+                                aria-label={`Cancel & Refund ${enr.studentName}`}
+                                title="Cancel & Issue Refund"
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold transition-colors disabled:opacity-50 ${
+                                  darkMode
+                                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+                                    : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                }`}
+                              >
+                                <Ban className="h-3 w-3" />
+                                <span>Refund</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setHistoryEnr(enr)}
+                              aria-label={`View history for ${enr.studentName}`}
+                              title="Enrollment History"
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold ${
+                                darkMode
+                                  ? 'border-[#253763] bg-[#09122B] text-slate-300 hover:bg-[#132347]'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              <History className="h-3 w-3" />
                             </button>
                             <button
                               type="button"
@@ -738,6 +897,7 @@ export function EnrollmentsFeePanel({
                   onChange={(e) => {
                     const nextCourseId = e.target.value;
                     setCourseId(nextCourseId);
+                    setBatchId('');
                     const matched = courses.find((c) => c.id === nextCourseId);
                     if (matched && !editingEnr) {
                       setAmountPaid(String(matched.price));
@@ -751,6 +911,54 @@ export function EnrollmentsFeePanel({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="enr-batch"
+                    className="mb-1 block text-xs font-bold text-slate-700"
+                  >
+                    Assign Batch
+                  </label>
+                  <select
+                    id="enr-batch"
+                    value={batchId}
+                    onChange={(e) => setBatchId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                  >
+                    <option value="">-- No Specific Batch --</option>
+                    {batches
+                      .filter((b) => b.courseId === courseId)
+                      .map((b) => {
+                        const usage = computeBatchSeatUsage(b);
+                        return (
+                          <option
+                            key={b.id}
+                            value={b.id}
+                            disabled={b.id !== editingEnr?.batchId && (b.status === 'closed' || usage.isFull)}
+                          >
+                            {b.name} ({usage.remainingSeats} left)
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    htmlFor="enr-expiry"
+                    className="mb-1 block text-xs font-bold text-slate-700"
+                  >
+                    Access Expiry (Optional)
+                  </label>
+                  <input
+                    id="enr-expiry"
+                    type="date"
+                    value={expiresAt}
+                    onChange={(e) => setExpiresAt(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -854,6 +1062,9 @@ export function EnrollmentsFeePanel({
                     <option value="pending">Pending</option>
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="transferred">Transferred</option>
+                    <option value="expired">Expired</option>
                   </select>
                 </div>
               </div>
@@ -881,6 +1092,252 @@ export function EnrollmentsFeePanel({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Course / Batch Transfer Modal */}
+      {transferEnr && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Transfer Student Enrollment"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-extrabold">Transfer Course / Batch</h3>
+              <button
+                type="button"
+                onClick={() => setTransferEnr(null)}
+                aria-label="Close transfer modal"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleTransferSubmit} className="mt-4 space-y-3">
+              <p className="text-xs text-slate-600">
+                Student: <strong className="text-slate-900">{transferEnr.studentName}</strong>
+              </p>
+              <div>
+                <label htmlFor="tr-course" className="mb-1 block text-xs font-bold text-slate-700">
+                  Target Course
+                </label>
+                <select
+                  id="tr-course"
+                  value={transferCourseId}
+                  onChange={(e) => {
+                    setTransferCourseId(e.target.value);
+                    setTransferBatchId('');
+                  }}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                >
+                  {courses
+                    .filter((c) => isCourseStatusLive(c.status))
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="tr-batch" className="mb-1 block text-xs font-bold text-slate-700">
+                  Target Batch
+                </label>
+                <select
+                  id="tr-batch"
+                  value={transferBatchId}
+                  onChange={(e) => setTransferBatchId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                >
+                  <option value="">-- No Specific Batch --</option>
+                  {batches
+                    .filter((b) => b.courseId === transferCourseId)
+                    .map((b) => {
+                      const usage = computeBatchSeatUsage(b);
+                      return (
+                        <option
+                          key={b.id}
+                          value={b.id}
+                          disabled={b.id !== transferEnr.batchId && (b.status === 'closed' || usage.isFull)}
+                        >
+                          {b.name} ({usage.remainingSeats} left)
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="tr-reason" className="mb-1 block text-xs font-bold text-slate-700">
+                  Transfer Reason
+                </label>
+                <input
+                  id="tr-reason"
+                  type="text"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  placeholder="Schedule conflict / batch upgrade"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs"
+                />
+              </div>
+              {transferErr && (
+                <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  {transferErr}
+                </p>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setTransferEnr(null)}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={transferBusy}
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {transferBusy ? 'Transferring...' : 'Confirm Transfer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel & Refund Modal */}
+      {refundEnr && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Cancel & Refund Enrollment"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-extrabold text-rose-700">Cancel &amp; Refund Enrollment</h3>
+              <button
+                type="button"
+                onClick={() => setRefundEnr(null)}
+                aria-label="Close refund modal"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleRefundSubmit} className="mt-4 space-y-3">
+              <p className="text-xs text-slate-600">
+                Student: <strong className="text-slate-900">{refundEnr.studentName}</strong> · Paid:{' '}
+                <strong className="font-mono-tabular">৳{refundEnr.amountPaid}</strong>
+              </p>
+              <div>
+                <label htmlFor="rf-amount" className="mb-1 block text-xs font-bold text-slate-700">
+                  Refund Amount (BDT)
+                </label>
+                <input
+                  id="rf-amount"
+                  type="number"
+                  min={0}
+                  max={refundEnr.amountPaid}
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  className="font-mono-tabular w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold"
+                />
+              </div>
+              <div>
+                <label htmlFor="rf-reason" className="mb-1 block text-xs font-bold text-slate-700">
+                  Cancellation / Refund Reason
+                </label>
+                <input
+                  id="rf-reason"
+                  type="text"
+                  required
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder="Requested within 7-day refund policy"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs"
+                />
+              </div>
+              {refundErr && (
+                <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  {refundErr}
+                </p>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRefundEnr(null)}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700"
+                >
+                  Keep Enrollment
+                </button>
+                <button
+                  type="submit"
+                  disabled={refundBusy}
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {refundBusy ? 'Processing...' : 'Confirm Cancel & Refund'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Enrollment History Modal */}
+      {historyEnr && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Enrollment History"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs"
+        >
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h3 className="text-base font-extrabold">Enrollment History Timeline</h3>
+                <p className="text-xs text-slate-500">
+                  {historyEnr.studentName} · {historyEnr.courseTitle}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryEnr(null)}
+                aria-label="Close history modal"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 space-y-2.5 overflow-y-auto p-6 text-xs">
+              {(historyEnr.history ?? []).length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center text-slate-500">
+                  Enrolled on {new Date(historyEnr.enrolledAt).toLocaleString()} via{' '}
+                  {historyEnr.paymentMethod}.
+                </p>
+              ) : (
+                (historyEnr.history ?? []).map((h, i) => (
+                  <div
+                    key={h.id || i}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-3.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold uppercase text-indigo-700">
+                        {h.action}
+                      </span>
+                      <span className="font-mono-tabular text-[11px] text-slate-500">
+                        {new Date(h.createdAt || h.at || historyEnr.enrolledAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 font-semibold text-slate-800">{h.note}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">By {h.actorName}</p>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
