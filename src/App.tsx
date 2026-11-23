@@ -118,7 +118,7 @@ function RouterShell() {
     pageNode = <ResultPage />;
   } else if (pathname === '/login' || pathname === '/profile') {
     pageNode = <LoginPage navigate={navigate} />;
-  } else if (pathname === '/portal') {
+  } else if (pathname === '/portal' || pathname === '/dashboard') {
     pageNode = <PortalPage navigate={navigate} />;
   } else if (pathname === '/about-us') {
     pageNode = <AboutPage />;
@@ -130,6 +130,17 @@ function RouterShell() {
     pageNode = <PolicyPage title="Privacy Policy" />;
   } else if (pathname === '/refund-policy') {
     pageNode = <PolicyPage title="Refund Policy" />;
+  }
+
+  const isPortalShell = pathname === '/portal' || pathname === '/dashboard';
+
+  if (isPortalShell) {
+    return (
+      <div className="min-h-screen">
+        <main className="min-h-screen">{pageNode}</main>
+        <CartDrawer navigate={navigate} />
+      </div>
+    );
   }
 
   return (

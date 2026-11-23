@@ -11,19 +11,24 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { filterActivePaymentGateways } from '../lib/domain';
+import {
+  filterActiveBranches,
+  filterActivePaymentGateways,
+  resolveDefaultActiveBranchId,
+} from '../lib/domain';
 import type { Branch, PaymentGatewayType, PaymentTransaction } from '../types';
 
 interface FourStepPaymentModalProps {
   open: boolean;
   onClose: () => void;
-  referenceType: 'course' | 'order';
+  referenceType: 'course' | 'order' | 'ebook';
   itemTitle: string;
   baseAmount: number;
   deliveryFee?: number;
   initialCouponCode?: string;
   initialDiscount?: number;
   courseId?: string;
+  ebookId?: string;
   branchId?: string;
   branches?: Branch[];
   orderItems?: { productId: string; quantity: number }[];
@@ -59,6 +64,7 @@ export function FourStepPaymentModal({
   initialCouponCode = '',
   initialDiscount = 0,
   courseId,
+  ebookId,
   branchId,
   branches = [],
   orderItems,
@@ -69,12 +75,19 @@ export function FourStepPaymentModal({
   onSuccess,
 }: FourStepPaymentModalProps) {
   const { user, bootstrap, apiFetch } = useAuth();
+  const activeBranches = useMemo(() => {
+    const source = branches.length > 0 ? branches : (bootstrap?.branches ?? []);
+    return filterActiveBranches(source);
+  }, [branches, bootstrap?.branches]);
+
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [couponInput, setCouponInput] = useState(initialCouponCode);
   const [appliedCoupon, setAppliedCoupon] = useState(initialCouponCode);
   const [discountAmount, setDiscountAmount] = useState(initialDiscount);
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState(branchId || branches[0]?.id || 'br-mirpur');
+  const [selectedBranch, setSelectedBranch] = useState(() =>
+    resolveDefaultActiveBranchId(activeBranches, branchId)
+  );
 
   const activeGateways = useMemo(() => {
     const liveList = filterActivePaymentGateways(bootstrap?.paymentGateways);
@@ -124,6 +137,24 @@ export function FourStepPaymentModal({
   const [receipt, setReceipt] = useState<PaymentTransaction | null>(null);
 
   useEffect(() => {
+    if (open) {
+      setStep(1);
+      setError(null);
+      setReceipt(null);
+      setCouponMsg(null);
+      setCouponInput(initialCouponCode);
+      setAppliedCoupon(initialCouponCode);
+      setDiscountAmount(initialDiscount);
+      setTrxId(`AEC${Date.now().toString().slice(-6)}`);
+    }
+  }, [open, initialCouponCode, initialDiscount]);
+
+  useEffect(() => {
+    const resolved = resolveDefaultActiveBranchId(activeBranches, branchId);
+    setSelectedBranch(resolved);
+  }, [activeBranches, branchId]);
+
+  useEffect(() => {
     if (activeGateways.length > 0 && !activeGateways.some((g) => g.id === gateway)) {
       setGateway(activeGateways[0].id);
     }
@@ -144,6 +175,17 @@ export function FourStepPaymentModal({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code: couponInput.trim(), courseId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Invalid coupon');
+        setAppliedCoupon(data.coupon.code);
+        setDiscountAmount(data.pricing.couponDiscountAmount);
+        setCouponMsg(`Applied ${data.coupon.code} (-৳${data.pricing.couponDiscountAmount})`);
+      } else if (referenceType === 'ebook' && ebookId) {
+        const res = await fetch('/api/public/coupons/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: couponInput.trim(), ebookId }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Invalid coupon');
@@ -178,12 +220,17 @@ export function FourStepPaymentModal({
     setError(null);
     setSubmitting(true);
     try {
+      const effectiveBranchId =
+        referenceType === 'course'
+          ? selectedBranch || 'online'
+          : undefined;
       const res = await apiFetch<{ transaction: PaymentTransaction }>('/api/payments/checkout', {
         method: 'POST',
         body: JSON.stringify({
           referenceType,
           courseId,
-          branchId: selectedBranch,
+          ebookId,
+          branchId: effectiveBranchId,
           items: orderItems,
           deliveryMode,
           deliveryAddress,
@@ -254,29 +301,39 @@ export function FourStepPaymentModal({
             <div className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  {referenceType === 'course' ? 'Course Admission' : 'Product Order'}
+                  {referenceType === 'course'
+                    ? 'Course Admission'
+                    : referenceType === 'ebook'
+                      ? 'Digital E-Book / PDF Purchase'
+                      : 'Product Order'}
                 </p>
                 <h3 className="mt-1 text-lg font-extrabold text-slate-900">{itemTitle}</h3>
-                {referenceType === 'course' && branches.length > 0 && (
+                {referenceType === 'course' && (
                   <div className="mt-3">
                     <label
                       htmlFor="pay-branch"
                       className="mb-1 block text-xs font-semibold text-slate-700"
                     >
-                      Campus / Branch
+                      Active Campus / Branch
                     </label>
-                    <select
-                      id="pay-branch"
-                      value={selectedBranch}
-                      onChange={(e) => setSelectedBranch(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
-                    >
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
+                    {activeBranches.length > 0 ? (
+                      <select
+                        id="pay-branch"
+                        value={selectedBranch}
+                        onChange={(e) => setSelectedBranch(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                      >
+                        {activeBranches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                        Online / Virtual Campus Only — all physical campus desks are currently inactive.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

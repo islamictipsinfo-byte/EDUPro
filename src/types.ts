@@ -96,6 +96,7 @@ export interface Course {
   demoVideoTitle: string;
   demoYoutubeUrl: string;
   status: 'active' | 'draft';
+  sourcePostId?: string;
 }
 
 export interface ExamQuestion {
@@ -171,6 +172,10 @@ export interface Ebook {
   originalPrice: number;
   author: string;
   pagesCount: number;
+  pdfUrl?: string;
+  fileSize?: string;
+  salesCount?: number;
+  status?: 'active' | 'draft';
   coverImage?: string;
   summary: string;
   sampleContent: string[];
@@ -494,7 +499,7 @@ export interface FinancialRecord {
 export interface PaymentTransaction {
   id: string;
   invoiceNo: string;
-  referenceType: 'course' | 'order';
+  referenceType: 'course' | 'order' | 'ebook';
   referenceId: string;
   userId: string;
   payerName: string;
@@ -545,7 +550,8 @@ export interface RecycleBinItem {
     | 'coupon'
     | 'branch'
     | 'payment_gateway'
-    | 'plugin';
+    | 'plugin'
+    | 'enrollment';
   originalId: string;
   label: string;
   deletedBy: string;
@@ -553,11 +559,16 @@ export interface RecycleBinItem {
   snapshot: unknown;
 }
 
+export type AuditLogCategory = 'login' | 'course' | 'payment' | 'system';
+export type AuditLogSeverity = 'info' | 'warning' | 'critical';
+
 export interface AuditLogEntry {
   id: string;
   actorId: string;
   actorName: string;
   actorRole: UserRole;
+  category?: AuditLogCategory;
+  severity?: AuditLogSeverity;
   action: string;
   target: string;
   details: string;
@@ -624,6 +635,82 @@ export interface HeaderMenuItem {
 
 export type AiAgentRole = 'student' | 'teacher' | 'admin' | 'support' | 'learning';
 
+export interface DashboardWidgetVisibility {
+  heroBanner: boolean;
+  kpiRow: boolean;
+  analyticsOverview: boolean;
+  courseProgress: boolean;
+  liveClassNow: boolean;
+  recentActivities: boolean;
+  upcomingClasses: boolean;
+  topStudents: boolean;
+  quickActions: boolean;
+  systemActivityLogs?: boolean;
+}
+
+export interface DashboardColorConfig {
+  workspaceLightBg: string;
+  workspaceLightBgEnd: string;
+  workspaceDarkBg: string;
+  sidebarStart: string;
+  sidebarEnd: string;
+  activeNavStart: string;
+  activeNavEnd: string;
+  heroStart: string;
+  heroMid: string;
+  heroEnd: string;
+  heroButtonBg: string;
+  heroButtonText: string;
+  heroMottoColor: string;
+  kpiStudentsStart: string;
+  kpiStudentsEnd: string;
+  kpiTeachersStart: string;
+  kpiTeachersEnd: string;
+  kpiCoursesStart: string;
+  kpiCoursesEnd: string;
+  kpiBatchesStart: string;
+  kpiBatchesEnd: string;
+  liveCardStart: string;
+  liveCardEnd: string;
+  chartStudentsColor: string;
+  chartEnrollmentsColor: string;
+  chartViewsColor: string;
+}
+
+export interface DashboardImageConfig {
+  brandLogoUrl: string;
+  heroAvatarUrl: string;
+  heroBannerBgUrl: string;
+  sidebarPromoImageUrl: string;
+  adminAvatarUrl: string;
+  liveClassBannerUrl: string;
+}
+
+export interface DashboardCustomizationConfig {
+  themeMode: 'futuristic_light' | 'midnight_dark';
+  accentPreset: 'electric_blue' | 'emerald_teal' | 'royal_purple' | 'sunset_amber' | 'custom';
+  brandTitle: string;
+  brandBadge: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  heroQuote: string;
+  heroMottoTop: string;
+  heroMottoBottom: string;
+  heroCtaLabel: string;
+  heroCtaSection: 'courses' | 'enrollments' | 'exams' | 'lessons' | 'catalog_cms';
+  sidebarPromoTitle: string;
+  sidebarPromoSubtitle: string;
+  kpiLabels: {
+    students: string;
+    teachers: string;
+    courses: string;
+    batches: string;
+  };
+  colors: DashboardColorConfig;
+  images: DashboardImageConfig;
+  widgets: DashboardWidgetVisibility;
+}
+
 export interface SiteSettings {
   brandName: string;
   tagline: string;
@@ -650,5 +737,7 @@ export interface SiteSettings {
   customPages?: CustomPage[];
   heroSlides: HeroSlide[];
   homepageConfig?: HomepageConfig;
+  dashboardConfig?: DashboardCustomizationConfig;
 }
+
 

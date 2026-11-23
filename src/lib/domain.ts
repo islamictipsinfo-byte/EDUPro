@@ -1,8 +1,11 @@
 import type {
+  Branch,
+  CommunityPost,
   Coupon,
   Course,
   CourseBatch,
   CourseLesson,
+  DashboardCustomizationConfig,
   ExamQuestion,
   HeaderMenuItem,
   HomepageConfig,
@@ -25,6 +28,7 @@ export type PortalSection =
   | 'users'
   | 'orders'
   | 'ai_ecosystem'
+  | 'activity_logs'
   | 'guardian_monitor'
   | 'my_learning'
   | 'settings';
@@ -44,6 +48,7 @@ const ROLE_PORTAL_MATRIX: Record<UserRole, PortalSection[]> = {
     'users',
     'orders',
     'ai_ecosystem',
+    'activity_logs',
     'settings',
   ],
   branch_manager: [
@@ -768,6 +773,436 @@ export function filterActivePaymentGateways<T extends { active?: boolean; sortOr
     .filter((g) => g && g.active !== false)
     .sort((a, b) => (Number(a.sortOrder) || 99) - (Number(b.sortOrder) || 99));
 }
+
+export function filterActiveBranches<T extends { status?: string }>(
+  branches: T[] | undefined | null
+): T[] {
+  if (!Array.isArray(branches)) return [];
+  return branches.filter((b) => b && b.status === 'active');
+}
+
+export function resolveDefaultActiveBranchId(
+  branches: Branch[] | undefined | null,
+  preferredId?: string | null
+): string {
+  const active = filterActiveBranches(branches);
+  if (preferredId && active.some((b) => b.id === preferredId)) {
+    return preferredId;
+  }
+  return active[0]?.id ?? '';
+}
+
+export function sanitizeHexColor(raw: unknown, fallback: string): string {
+  if (typeof raw !== 'string') return fallback;
+  const trimmed = raw.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toUpperCase() : fallback;
+}
+
+export const DEFAULT_DASHBOARD_CONFIG: DashboardCustomizationConfig = {
+  themeMode: 'futuristic_light',
+  accentPreset: 'electric_blue',
+  brandTitle: '',
+  brandBadge: 'LMS v3.0',
+  heroTitle: 'Welcome Back, Admin!',
+  heroSubtitle: "Alom's English Center LMS",
+  heroQuote: '"Dream Big... Learn Better..."',
+  heroMottoTop: 'Your Success',
+  heroMottoBottom: 'Our Mission',
+  heroCtaLabel: 'View Dashboard',
+  heroCtaSection: 'courses',
+  sidebarPromoTitle: 'Learn English',
+  sidebarPromoSubtitle: 'Build a Better Future',
+  kpiLabels: {
+    students: 'Total Students',
+    teachers: 'Total Teachers',
+    courses: 'Total Courses',
+    batches: 'Total Batches',
+  },
+  colors: {
+    workspaceLightBg: '#DCEBFF',
+    workspaceLightBgEnd: '#EEF5FF',
+    workspaceDarkBg: '#071029',
+    sidebarStart: '#071131',
+    sidebarEnd: '#08102B',
+    activeNavStart: '#2563EB',
+    activeNavEnd: '#6366F1',
+    heroStart: '#051F52',
+    heroMid: '#0F49AC',
+    heroEnd: '#0891B2',
+    heroButtonBg: '#FBBF24',
+    heroButtonText: '#020617',
+    heroMottoColor: '#FCD34D',
+    kpiStudentsStart: '#1D6FF2',
+    kpiStudentsEnd: '#38BDF8',
+    kpiTeachersStart: '#0EA57A',
+    kpiTeachersEnd: '#2DD4BF',
+    kpiCoursesStart: '#7C3AED',
+    kpiCoursesEnd: '#C084FC',
+    kpiBatchesStart: '#F59E0B',
+    kpiBatchesEnd: '#FB923C',
+    liveCardStart: '#0A1638',
+    liveCardEnd: '#08122E',
+    chartStudentsColor: '#2563EB',
+    chartEnrollmentsColor: '#10B981',
+    chartViewsColor: '#8B5CF6',
+  },
+  images: {
+    brandLogoUrl: '',
+    heroAvatarUrl: '/src/assets/images/avatar_student_portrait_1795437875582.jpg',
+    heroBannerBgUrl: '/src/assets/images/hero_campus_building_1795438781719.jpg',
+    sidebarPromoImageUrl: '/src/assets/images/sidebar_promo_skyline_1795438781849.jpg',
+    adminAvatarUrl: '/src/assets/images/avatar_admin_director_1795437875081.jpg',
+    liveClassBannerUrl: '',
+  },
+  widgets: {
+    heroBanner: true,
+    kpiRow: true,
+    analyticsOverview: true,
+    courseProgress: true,
+    liveClassNow: true,
+    recentActivities: true,
+    upcomingClasses: true,
+    topStudents: true,
+    quickActions: true,
+    systemActivityLogs: true,
+  },
+};
+
+export const DASHBOARD_PRESET_PALETTES: Record<
+  Exclude<DashboardCustomizationConfig['accentPreset'], 'custom'>,
+  Partial<DashboardCustomizationConfig['colors']>
+> = {
+  electric_blue: {
+    workspaceLightBg: '#DCEBFF',
+    workspaceLightBgEnd: '#EEF5FF',
+    sidebarStart: '#071131',
+    sidebarEnd: '#08102B',
+    activeNavStart: '#2563EB',
+    activeNavEnd: '#6366F1',
+    heroStart: '#051F52',
+    heroMid: '#0F49AC',
+    heroEnd: '#0891B2',
+    heroButtonBg: '#FBBF24',
+    heroButtonText: '#020617',
+    chartStudentsColor: '#2563EB',
+  },
+  emerald_teal: {
+    workspaceLightBg: '#D8F5EE',
+    workspaceLightBgEnd: '#ECFEFA',
+    sidebarStart: '#052320',
+    sidebarEnd: '#061A1E',
+    activeNavStart: '#0EA57A',
+    activeNavEnd: '#14B8A6',
+    heroStart: '#063B32',
+    heroMid: '#0D7D69',
+    heroEnd: '#0EA5E9',
+    heroButtonBg: '#FDE047',
+    heroButtonText: '#042F2E',
+    chartStudentsColor: '#0EA57A',
+  },
+  royal_purple: {
+    workspaceLightBg: '#ECE5FF',
+    workspaceLightBgEnd: '#F5F3FF',
+    sidebarStart: '#180B3B',
+    sidebarEnd: '#0F0826',
+    activeNavStart: '#7C3AED',
+    activeNavEnd: '#EC4899',
+    heroStart: '#2B0D5C',
+    heroMid: '#6D28D9',
+    heroEnd: '#DB2777',
+    heroButtonBg: '#FCD34D',
+    heroButtonText: '#1E1B4B',
+    chartStudentsColor: '#7C3AED',
+  },
+  sunset_amber: {
+    workspaceLightBg: '#FFF1D6',
+    workspaceLightBgEnd: '#FFFBEB',
+    sidebarStart: '#231109',
+    sidebarEnd: '#180B07',
+    activeNavStart: '#EA580C',
+    activeNavEnd: '#F59E0B',
+    heroStart: '#4A180B',
+    heroMid: '#C2410C',
+    heroEnd: '#F59E0B',
+    heroButtonBg: '#FFFFFF',
+    heroButtonText: '#7C2D12',
+    chartStudentsColor: '#EA580C',
+  },
+};
+
+export function normalizeDashboardConfig(
+  raw: unknown,
+  fallback: DashboardCustomizationConfig = DEFAULT_DASHBOARD_CONFIG
+): DashboardCustomizationConfig {
+  const baseColors = { ...DEFAULT_DASHBOARD_CONFIG.colors, ...(fallback.colors ?? {}) };
+  const baseImages = { ...DEFAULT_DASHBOARD_CONFIG.images, ...(fallback.images ?? {}) };
+  const baseKpiLabels = { ...DEFAULT_DASHBOARD_CONFIG.kpiLabels, ...(fallback.kpiLabels ?? {}) };
+  const baseWidgets = { ...DEFAULT_DASHBOARD_CONFIG.widgets, ...(fallback.widgets ?? {}) };
+
+  if (!raw || typeof raw !== 'object') {
+    return {
+      ...DEFAULT_DASHBOARD_CONFIG,
+      ...fallback,
+      kpiLabels: baseKpiLabels,
+      colors: baseColors,
+      images: baseImages,
+      widgets: baseWidgets,
+    };
+  }
+  const src = raw as Partial<DashboardCustomizationConfig>;
+  const rawWidgets = (src.widgets ?? {}) as Partial<DashboardCustomizationConfig['widgets']>;
+  const rawColors = (src.colors ?? {}) as Partial<DashboardCustomizationConfig['colors']>;
+  const rawImages = (src.images ?? {}) as Partial<DashboardCustomizationConfig['images']>;
+  const rawKpiLabels = (src.kpiLabels ?? {}) as Partial<DashboardCustomizationConfig['kpiLabels']>;
+
+  const themeMode: DashboardCustomizationConfig['themeMode'] =
+    src.themeMode === 'midnight_dark' ? 'midnight_dark' : 'futuristic_light';
+  const accentPreset: DashboardCustomizationConfig['accentPreset'] =
+    src.accentPreset === 'emerald_teal' ||
+    src.accentPreset === 'royal_purple' ||
+    src.accentPreset === 'sunset_amber' ||
+    src.accentPreset === 'custom'
+      ? src.accentPreset
+      : 'electric_blue';
+
+  const validCtaSections: DashboardCustomizationConfig['heroCtaSection'][] = [
+    'courses',
+    'enrollments',
+    'exams',
+    'lessons',
+    'catalog_cms',
+  ];
+  const heroCtaSection = validCtaSections.includes(
+    src.heroCtaSection as DashboardCustomizationConfig['heroCtaSection']
+  )
+    ? (src.heroCtaSection as DashboardCustomizationConfig['heroCtaSection'])
+    : (fallback.heroCtaSection ?? DEFAULT_DASHBOARD_CONFIG.heroCtaSection);
+
+  const normalizeOptionalImage = (val: unknown, defaultVal: string): string => {
+    if (typeof val !== 'string') return defaultVal;
+    const trimmed = val.trim();
+    if (!trimmed) return '';
+    return sanitizeSafeUrl(trimmed, defaultVal);
+  };
+
+  return {
+    themeMode,
+    accentPreset,
+    brandTitle: String(src.brandTitle ?? fallback.brandTitle ?? '').trim().slice(0, 60),
+    brandBadge:
+      String(src.brandBadge ?? fallback.brandBadge ?? DEFAULT_DASHBOARD_CONFIG.brandBadge)
+        .trim()
+        .slice(0, 24) || DEFAULT_DASHBOARD_CONFIG.brandBadge,
+    heroTitle:
+      String(src.heroTitle ?? fallback.heroTitle ?? DEFAULT_DASHBOARD_CONFIG.heroTitle)
+        .trim()
+        .slice(0, 80) || DEFAULT_DASHBOARD_CONFIG.heroTitle,
+    heroSubtitle:
+      String(src.heroSubtitle ?? fallback.heroSubtitle ?? DEFAULT_DASHBOARD_CONFIG.heroSubtitle)
+        .trim()
+        .slice(0, 80) || DEFAULT_DASHBOARD_CONFIG.heroSubtitle,
+    heroQuote:
+      String(src.heroQuote ?? fallback.heroQuote ?? DEFAULT_DASHBOARD_CONFIG.heroQuote)
+        .trim()
+        .slice(0, 120) || DEFAULT_DASHBOARD_CONFIG.heroQuote,
+    heroMottoTop:
+      String(src.heroMottoTop ?? fallback.heroMottoTop ?? DEFAULT_DASHBOARD_CONFIG.heroMottoTop)
+        .trim()
+        .slice(0, 40) || DEFAULT_DASHBOARD_CONFIG.heroMottoTop,
+    heroMottoBottom:
+      String(
+        src.heroMottoBottom ?? fallback.heroMottoBottom ?? DEFAULT_DASHBOARD_CONFIG.heroMottoBottom
+      )
+        .trim()
+        .slice(0, 40) || DEFAULT_DASHBOARD_CONFIG.heroMottoBottom,
+    heroCtaLabel:
+      String(src.heroCtaLabel ?? fallback.heroCtaLabel ?? DEFAULT_DASHBOARD_CONFIG.heroCtaLabel)
+        .trim()
+        .slice(0, 40) || DEFAULT_DASHBOARD_CONFIG.heroCtaLabel,
+    heroCtaSection,
+    sidebarPromoTitle:
+      String(
+        src.sidebarPromoTitle ??
+          fallback.sidebarPromoTitle ??
+          DEFAULT_DASHBOARD_CONFIG.sidebarPromoTitle
+      )
+        .trim()
+        .slice(0, 40) || DEFAULT_DASHBOARD_CONFIG.sidebarPromoTitle,
+    sidebarPromoSubtitle:
+      String(
+        src.sidebarPromoSubtitle ??
+          fallback.sidebarPromoSubtitle ??
+          DEFAULT_DASHBOARD_CONFIG.sidebarPromoSubtitle
+      )
+        .trim()
+        .slice(0, 60) || DEFAULT_DASHBOARD_CONFIG.sidebarPromoSubtitle,
+    kpiLabels: {
+      students: String(rawKpiLabels.students ?? baseKpiLabels.students).trim().slice(0, 32) || baseKpiLabels.students,
+      teachers: String(rawKpiLabels.teachers ?? baseKpiLabels.teachers).trim().slice(0, 32) || baseKpiLabels.teachers,
+      courses: String(rawKpiLabels.courses ?? baseKpiLabels.courses).trim().slice(0, 32) || baseKpiLabels.courses,
+      batches: String(rawKpiLabels.batches ?? baseKpiLabels.batches).trim().slice(0, 32) || baseKpiLabels.batches,
+    },
+    colors: {
+      workspaceLightBg: sanitizeHexColor(rawColors.workspaceLightBg, baseColors.workspaceLightBg),
+      workspaceLightBgEnd: sanitizeHexColor(rawColors.workspaceLightBgEnd, baseColors.workspaceLightBgEnd),
+      workspaceDarkBg: sanitizeHexColor(rawColors.workspaceDarkBg, baseColors.workspaceDarkBg),
+      sidebarStart: sanitizeHexColor(rawColors.sidebarStart, baseColors.sidebarStart),
+      sidebarEnd: sanitizeHexColor(rawColors.sidebarEnd, baseColors.sidebarEnd),
+      activeNavStart: sanitizeHexColor(rawColors.activeNavStart, baseColors.activeNavStart),
+      activeNavEnd: sanitizeHexColor(rawColors.activeNavEnd, baseColors.activeNavEnd),
+      heroStart: sanitizeHexColor(rawColors.heroStart, baseColors.heroStart),
+      heroMid: sanitizeHexColor(rawColors.heroMid, baseColors.heroMid),
+      heroEnd: sanitizeHexColor(rawColors.heroEnd, baseColors.heroEnd),
+      heroButtonBg: sanitizeHexColor(rawColors.heroButtonBg, baseColors.heroButtonBg),
+      heroButtonText: sanitizeHexColor(rawColors.heroButtonText, baseColors.heroButtonText),
+      heroMottoColor: sanitizeHexColor(rawColors.heroMottoColor, baseColors.heroMottoColor),
+      kpiStudentsStart: sanitizeHexColor(rawColors.kpiStudentsStart, baseColors.kpiStudentsStart),
+      kpiStudentsEnd: sanitizeHexColor(rawColors.kpiStudentsEnd, baseColors.kpiStudentsEnd),
+      kpiTeachersStart: sanitizeHexColor(rawColors.kpiTeachersStart, baseColors.kpiTeachersStart),
+      kpiTeachersEnd: sanitizeHexColor(rawColors.kpiTeachersEnd, baseColors.kpiTeachersEnd),
+      kpiCoursesStart: sanitizeHexColor(rawColors.kpiCoursesStart, baseColors.kpiCoursesStart),
+      kpiCoursesEnd: sanitizeHexColor(rawColors.kpiCoursesEnd, baseColors.kpiCoursesEnd),
+      kpiBatchesStart: sanitizeHexColor(rawColors.kpiBatchesStart, baseColors.kpiBatchesStart),
+      kpiBatchesEnd: sanitizeHexColor(rawColors.kpiBatchesEnd, baseColors.kpiBatchesEnd),
+      liveCardStart: sanitizeHexColor(rawColors.liveCardStart, baseColors.liveCardStart),
+      liveCardEnd: sanitizeHexColor(rawColors.liveCardEnd, baseColors.liveCardEnd),
+      chartStudentsColor: sanitizeHexColor(rawColors.chartStudentsColor, baseColors.chartStudentsColor),
+      chartEnrollmentsColor: sanitizeHexColor(rawColors.chartEnrollmentsColor, baseColors.chartEnrollmentsColor),
+      chartViewsColor: sanitizeHexColor(rawColors.chartViewsColor, baseColors.chartViewsColor),
+    },
+    images: {
+      brandLogoUrl: normalizeOptionalImage(rawImages.brandLogoUrl, baseImages.brandLogoUrl),
+      heroAvatarUrl:
+        sanitizeSafeUrl(String(rawImages.heroAvatarUrl ?? baseImages.heroAvatarUrl), baseImages.heroAvatarUrl),
+      heroBannerBgUrl:
+        sanitizeSafeUrl(String(rawImages.heroBannerBgUrl ?? baseImages.heroBannerBgUrl), baseImages.heroBannerBgUrl),
+      sidebarPromoImageUrl: sanitizeSafeUrl(
+        String(rawImages.sidebarPromoImageUrl ?? baseImages.sidebarPromoImageUrl),
+        baseImages.sidebarPromoImageUrl
+      ),
+      adminAvatarUrl:
+        sanitizeSafeUrl(String(rawImages.adminAvatarUrl ?? baseImages.adminAvatarUrl), baseImages.adminAvatarUrl),
+      liveClassBannerUrl: normalizeOptionalImage(
+        rawImages.liveClassBannerUrl,
+        baseImages.liveClassBannerUrl
+      ),
+    },
+    widgets: {
+      heroBanner: rawWidgets.heroBanner !== false,
+      kpiRow: rawWidgets.kpiRow !== false,
+      analyticsOverview: rawWidgets.analyticsOverview !== false,
+      courseProgress: rawWidgets.courseProgress !== false,
+      liveClassNow: rawWidgets.liveClassNow !== false,
+      recentActivities: rawWidgets.recentActivities !== false,
+      upcomingClasses: rawWidgets.upcomingClasses !== false,
+      topStudents: rawWidgets.topStudents !== false,
+      quickActions: rawWidgets.quickActions !== false,
+      systemActivityLogs: rawWidgets.systemActivityLogs !== false,
+    },
+  };
+}
+
+const VALID_COURSE_CATEGORIES: Course['category'][] = [
+  'HSC English',
+  'SSC English',
+  'IELTS & Spoken',
+  'Grammar Pro',
+  'Admission',
+  'Combo Packs',
+];
+
+function inferCourseCategoryFromPost(post: CommunityPost, override?: string): Course['category'] {
+  if (override && VALID_COURSE_CATEGORIES.includes(override as Course['category'])) {
+    return override as Course['category'];
+  }
+  const hay = `${post.category} ${post.title} ${post.content}`.toLowerCase();
+  if (hay.includes('ielts') || hay.includes('spoken')) return 'IELTS & Spoken';
+  if (hay.includes('hsc')) return 'HSC English';
+  if (hay.includes('ssc')) return 'SSC English';
+  if (hay.includes('admission') || hay.includes('varsity') || hay.includes('iba')) return 'Admission';
+  if (hay.includes('combo')) return 'Combo Packs';
+  return 'Grammar Pro';
+}
+
+export function buildCourseDraftFromPost(
+  post: CommunityPost,
+  existingCourses: Course[],
+  branches: Branch[],
+  overrides: {
+    price?: number;
+    originalPrice?: number;
+    category?: string;
+    levelTag?: string;
+    status?: 'active' | 'draft';
+    isCombo?: boolean;
+    instructorIds?: string[];
+  } = {}
+): Course {
+  const cleanTitle = post.title.trim() || 'Featured English Course';
+  const baseSlug =
+    cleanTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || `course-${Date.now()}`;
+  let slug = baseSlug;
+  let counter = 2;
+  while (existingCourses.some((c) => c.slug === slug)) {
+    slug = `${baseSlug}-${counter}`;
+    counter += 1;
+  }
+
+  const category = inferCourseCategoryFromPost(post, overrides.category);
+  const price = Math.max(0, Math.round(Number(overrides.price ?? 1990)));
+  const originalPrice = Math.max(price, Math.round(Number(overrides.originalPrice ?? (price > 0 ? price + 1000 : 0))));
+  const activeBranches = filterActiveBranches(branches);
+  const branchIds = activeBranches.length ? [activeBranches[0].id] : ['br-mirpur'];
+
+  const sentences = post.content
+    .split(/[\n.!?]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 8);
+  const highlights =
+    sentences.slice(0, 4).length > 0
+      ? sentences.slice(0, 4)
+      : [
+          'Structured curriculum adapted from editorial guide',
+          'Live & recorded classes with lecture sheets',
+          'Weekly MCQ & written board-standard assessments',
+        ];
+
+  const subtitle =
+    sentences[0]?.slice(0, 110) || `${category} intensive curriculum derived from community guide`;
+
+  return {
+    id: `crs-${Date.now()}`,
+    slug,
+    title: cleanTitle,
+    subtitle,
+    category,
+    levelTag: String(overrides.levelTag ?? (category === 'IELTS & Spoken' ? 'IELTS 8.0' : '2026 Batch')).trim(),
+    isCombo: Boolean(overrides.isCombo),
+    price,
+    originalPrice,
+    enrolledCount: 0,
+    examSystemIncluded: true,
+    branchIds,
+    instructorIds:
+      Array.isArray(overrides.instructorIds) && overrides.instructorIds.length
+        ? overrides.instructorIds
+        : ['inst-alomgir'],
+    thumbnail: sanitizeSafeUrl(
+      post.image ?? '',
+      '/src/assets/images/hero_hsc_english_1795411661478.jpg'
+    ),
+    description: post.content.trim(),
+    highlights,
+    demoVideoTitle: `${cleanTitle} — Intro Class`,
+    demoYoutubeUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+    status: overrides.status === 'active' ? 'active' : 'draft',
+    sourcePostId: post.id,
+  };
+}
+
 
 
 

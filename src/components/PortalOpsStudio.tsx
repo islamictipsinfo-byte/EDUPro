@@ -1,16 +1,19 @@
 import {
   Activity,
+  BookMarked,
   Bot,
   CheckCircle2,
   Coins,
   DatabaseBackup,
   Edit3,
+  ExternalLink,
   FileArchive,
   Globe,
   KeyRound,
   Layers,
   Megaphone,
   Package,
+  Pencil,
   Play,
   Plus,
   Power,
@@ -536,6 +539,9 @@ interface CatalogContentPanelProps extends RefreshProps {
   posts: CommunityPost[];
   coupons: Coupon[];
   branches: Branch[];
+  transactions?: PaymentTransaction[];
+  initialSubTab?: 'ebooks' | 'products' | 'instructors' | 'categories' | 'posts' | 'coupons';
+  onOpenCoursesSection?: () => void;
 }
 
 export function CatalogContentPanel({
@@ -546,32 +552,52 @@ export function CatalogContentPanel({
   posts,
   coupons,
   branches,
+  transactions = [],
+  initialSubTab = 'ebooks',
+  onOpenCoursesSection,
   onRefresh,
   onNotify,
 }: CatalogContentPanelProps) {
   const { apiFetch } = useAuth();
   const [subTab, setSubTab] = useState<
     'ebooks' | 'products' | 'instructors' | 'categories' | 'posts' | 'coupons'
-  >('ebooks');
+  >(initialSubTab);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  // Ebook form
+  useEffect(() => {
+    if (initialSubTab) {
+      setSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
+
+  // Ebook form + edit state
+  const [editingEbookId, setEditingEbookId] = useState<string | null>(null);
   const [ebTitle, setEbTitle] = useState('');
+  const [ebAuthor, setEbAuthor] = useState('Alomgir Hossain');
   const [ebLevel, setEbLevel] = useState('HSC 27');
+  const [ebPages, setEbPages] = useState(64);
+  const [ebFileSize, setEbFileSize] = useState('3.8 MB');
+  const [ebPdfUrl, setEbPdfUrl] = useState('');
   const [ebIsFree, setEbIsFree] = useState(false);
   const [ebPrice, setEbPrice] = useState(190);
+  const [ebOriginalPrice, setEbOriginalPrice] = useState(320);
+  const [ebStatus, setEbStatus] = useState<'active' | 'draft'>('active');
   const [ebCover, setEbCover] = useState('/src/assets/images/course_english_books_1795411661325.jpg');
   const [ebSummary, setEbSummary] = useState('');
+  const [ebSampleText, setEbSampleText] = useState('');
 
-  // Product form
+  // Product form + edit state
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [prTitle, setPrTitle] = useState('');
   const [prCategory, setPrCategory] = useState('Books');
   const [prPrice, setPrPrice] = useState(420);
+  const [prOriginalPrice, setPrOriginalPrice] = useState(550);
   const [prStock, setPrStock] = useState(40);
   const [prImage, setPrImage] = useState('/src/assets/images/course_english_books_1795411661325.jpg');
   const [prDesc, setPrDesc] = useState('');
 
-  // Instructor form
+  // Instructor form + edit state
+  const [editingInstructorId, setEditingInstructorId] = useState<string | null>(null);
   const [inName, setInName] = useState('');
   const [inSubject, setInSubject] = useState('HSC & IELTS Grammar');
   const [inRoleTitle, setInRoleTitle] = useState('Senior Faculty');
@@ -579,22 +605,89 @@ export function CatalogContentPanel({
   const [inBranchId, setInBranchId] = useState(branches[0]?.id ?? 'br-mirpur');
   const [inAvatar, setInAvatar] = useState('/src/assets/images/instructor_portrait_lead_1795411661581.jpg');
 
-  // Category form
+  // Category form + edit state
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [catName, setCatName] = useState('');
   const [catType, setCatType] = useState<'course' | 'product' | 'ebook' | 'post'>('course');
+  const [catActive, setCatActive] = useState(true);
   const [catImage, setCatImage] = useState('/src/assets/images/hero_hsc_english_1795411661478.jpg');
 
-  // Post form
+  // Post form + edit + Course-from-Post converter state
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [postTitle, setPostTitle] = useState('');
   const [postCat, setPostCat] = useState('Exam Strategy & Tips');
+  const [postStatus, setPostStatus] = useState<'published' | 'draft'>('published');
   const [postContent, setPostContent] = useState('');
   const [postImage, setPostImage] = useState('');
+
+  const [convertingPost, setConvertingPost] = useState<CommunityPost | null>(null);
+  const [cfpCategory, setCfpCategory] = useState('Grammar Pro');
+  const [cfpLevelTag, setCfpLevelTag] = useState('2026 Batch');
+  const [cfpPrice, setCfpPrice] = useState(1990);
+  const [cfpOriginalPrice, setCfpOriginalPrice] = useState(2990);
+  const [cfpStatus, setCfpStatus] = useState<'active' | 'draft'>('active');
+  const [cfpBusy, setCfpBusy] = useState(false);
 
   // Coupon form
   const [cpCode, setCpCode] = useState('');
   const [cpPercent, setCpPercent] = useState(15);
   const [cpAppliesTo, setCpAppliesTo] = useState<'all' | 'courses' | 'products'>('all');
   const [cpDesc, setCpDesc] = useState('');
+
+  const resetEbookForm = () => {
+    setEditingEbookId(null);
+    setEbTitle('');
+    setEbAuthor('Alomgir Hossain');
+    setEbLevel('HSC 27');
+    setEbPages(64);
+    setEbFileSize('3.8 MB');
+    setEbPdfUrl('');
+    setEbIsFree(false);
+    setEbPrice(190);
+    setEbOriginalPrice(320);
+    setEbStatus('active');
+    setEbCover('/src/assets/images/course_english_books_1795411661325.jpg');
+    setEbSummary('');
+    setEbSampleText('');
+  };
+
+  const resetProductForm = () => {
+    setEditingProductId(null);
+    setPrTitle('');
+    setPrCategory('Books');
+    setPrPrice(420);
+    setPrOriginalPrice(550);
+    setPrStock(40);
+    setPrImage('/src/assets/images/course_english_books_1795411661325.jpg');
+    setPrDesc('');
+  };
+
+  const resetInstructorForm = () => {
+    setEditingInstructorId(null);
+    setInName('');
+    setInSubject('HSC & IELTS Grammar');
+    setInRoleTitle('Senior Faculty');
+    setInEducation('MA in English, University of Dhaka');
+    setInBranchId(branches[0]?.id ?? 'br-mirpur');
+    setInAvatar('/src/assets/images/instructor_portrait_lead_1795411661581.jpg');
+  };
+
+  const resetCategoryForm = () => {
+    setEditingCategoryId(null);
+    setCatName('');
+    setCatType('course');
+    setCatActive(true);
+    setCatImage('/src/assets/images/hero_hsc_english_1795411661478.jpg');
+  };
+
+  const resetPostForm = () => {
+    setEditingPostId(null);
+    setPostTitle('');
+    setPostCat('Exam Strategy & Tips');
+    setPostStatus('published');
+    setPostContent('');
+    setPostImage('');
+  };
 
   const softDelete = async (endpoint: string, id: string, label: string) => {
     if (confirmId !== id) {
@@ -607,15 +700,19 @@ export function CatalogContentPanel({
     onNotify(`${label} moved to Recycle Bin.`);
   };
 
+  const ebookTxns = transactions.filter((t) => t.referenceType === 'ebook');
+  const totalEbookSales = ebooks.reduce((s, e) => s + (e.salesCount || 0), 0);
+  const totalEbookRevenue = ebookTxns.reduce((s, t) => s + t.totalAmount, 0);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
         {[
-          { id: 'ebooks' as const, label: `E-Books (${ebooks.length})` },
+          { id: 'ebooks' as const, label: `E-Books & PDFs (${ebooks.length})` },
           { id: 'products' as const, label: `Products (${products.length})` },
           { id: 'instructors' as const, label: `Instructors (${instructors.length})` },
           { id: 'categories' as const, label: `Categories (${categories.length})` },
-          { id: 'posts' as const, label: `Community Posts (${posts.length})` },
+          { id: 'posts' as const, label: `Posts & Course Converter (${posts.length})` },
           { id: 'coupons' as const, label: `Coupons (${coupons.length})` },
         ].map((tab) => (
           <button
@@ -634,38 +731,102 @@ export function CatalogContentPanel({
         ))}
       </div>
 
-      {/* E-BOOKS */}
+      {/* E-BOOKS & PDF SELLING SYSTEM */}
       {subTab === 'ebooks' && (
         <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <p className="text-xs font-bold uppercase text-slate-500">Published E-Books &amp; PDFs</p>
+              <p className="font-mono-tabular mt-1 text-2xl font-extrabold text-slate-900">
+                {ebooks.filter((e) => e.status !== 'draft').length} / {ebooks.length}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <p className="text-xs font-bold uppercase text-slate-500">Total PDF Orders / Sales</p>
+              <p className="font-mono-tabular mt-1 text-2xl font-extrabold text-indigo-700">
+                {totalEbookSales}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <p className="text-xs font-bold uppercase text-slate-500">E-Book Store Revenue</p>
+              <p className="font-mono-tabular mt-1 text-2xl font-extrabold text-emerald-700">
+                ৳{totalEbookRevenue.toLocaleString()}
+              </p>
+            </div>
+          </div>
+
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              await apiFetch('/api/portal/ebooks', {
-                method: 'POST',
-                body: JSON.stringify({
-                  title: ebTitle,
-                  level: ebLevel,
-                  isFree: ebIsFree,
-                  price: ebPrice,
-                  coverImage: ebCover,
-                  summary: ebSummary,
-                }),
-              });
-              setEbTitle('');
-              setEbSummary('');
+              const sampleContent = ebSampleText
+                .split('\n')
+                .map((l) => l.trim())
+                .filter(Boolean);
+              const body = {
+                title: ebTitle.trim(),
+                author: ebAuthor.trim() || 'Alomgir Hossain',
+                level: ebLevel.trim() || 'HSC 27',
+                pagesCount: Number(ebPages) || 64,
+                fileSize: ebFileSize.trim() || '3.8 MB',
+                pdfUrl: ebPdfUrl.trim(),
+                isFree: ebIsFree,
+                price: ebIsFree ? 0 : Number(ebPrice) || 0,
+                originalPrice: ebIsFree ? 0 : Math.max(Number(ebPrice) || 0, Number(ebOriginalPrice) || 0),
+                status: ebStatus,
+                coverImage: ebCover,
+                summary: ebSummary.trim(),
+                ...(sampleContent.length > 0 ? { sampleContent } : {}),
+              };
+              if (editingEbookId) {
+                await apiFetch(`/api/portal/ebooks/${editingEbookId}`, {
+                  method: 'PUT',
+                  body: JSON.stringify(body),
+                });
+                onNotify(`E-Book "${ebTitle}" updated.`);
+              } else {
+                await apiFetch('/api/portal/ebooks', {
+                  method: 'POST',
+                  body: JSON.stringify(body),
+                });
+                onNotify('E-Book & PDF published to library.');
+              }
+              resetEbookForm();
               await onRefresh();
-              onNotify('E-Book created and published.');
             }}
             className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4"
           >
-            <h2 className="text-lg font-extrabold text-slate-900">Create Digital E-Book</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <BookMarked className="h-5 w-5 text-indigo-600" />
+                <h2 className="text-lg font-extrabold text-slate-900">
+                  {editingEbookId ? 'Edit Digital E-Book / PDF' : 'Create & Sell Digital E-Book / PDF'}
+                </h2>
+              </div>
+              {editingEbookId && (
+                <button
+                  type="button"
+                  onClick={resetEbookForm}
+                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <input
                 type="text"
                 required
-                placeholder="E-Book Title"
+                placeholder="E-Book / PDF Title"
                 value={ebTitle}
                 onChange={(e) => setEbTitle(e.target.value)}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold"
+              />
+              <input
+                type="text"
+                placeholder="Author Name"
+                value={ebAuthor}
+                onChange={(e) => setEbAuthor(e.target.value)}
                 className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold"
               />
               <input
@@ -675,27 +836,69 @@ export function CatalogContentPanel({
                 onChange={(e) => setEbLevel(e.target.value)}
                 className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold"
               />
-              <div className="flex items-center gap-3">
-                <label className="inline-flex items-center gap-1.5 text-xs font-bold">
-                  <input
-                    type="checkbox"
-                    checked={ebIsFree}
-                    onChange={(e) => setEbIsFree(e.target.checked)}
-                  />
-                  Free
-                </label>
-                {!ebIsFree && (
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+              <input
+                type="number"
+                min={1}
+                placeholder="Pages"
+                value={ebPages}
+                onChange={(e) => setEbPages(Number(e.target.value))}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-xs"
+              />
+              <input
+                type="text"
+                placeholder="File Size (e.g. 4.2 MB)"
+                value={ebFileSize}
+                onChange={(e) => setEbFileSize(e.target.value)}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-xs"
+              />
+              <select
+                value={ebStatus}
+                onChange={(e) => setEbStatus(e.target.value as 'active' | 'draft')}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold"
+              >
+                <option value="active">Status: Active (Published)</option>
+                <option value="draft">Status: Draft (Hidden)</option>
+              </select>
+              <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold">
+                <input
+                  type="checkbox"
+                  checked={ebIsFree}
+                  onChange={(e) => setEbIsFree(e.target.checked)}
+                />
+                Free Download
+              </label>
+              {!ebIsFree && (
+                <div className="flex gap-2">
                   <input
                     type="number"
                     min={0}
                     value={ebPrice}
                     onChange={(e) => setEbPrice(Number(e.target.value))}
                     placeholder="Price ৳"
-                    className="w-28 rounded-xl border border-slate-300 px-3 py-2 text-xs"
+                    className="w-1/2 rounded-xl border border-slate-300 px-2.5 py-2 text-xs font-bold"
                   />
-                )}
-              </div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={ebOriginalPrice}
+                    onChange={(e) => setEbOriginalPrice(Number(e.target.value))}
+                    placeholder="Orig ৳"
+                    className="w-1/2 rounded-xl border border-slate-300 px-2.5 py-2 text-xs"
+                  />
+                </div>
+              )}
             </div>
+
+            <input
+              type="text"
+              placeholder="PDF Download / Storage URL (https://... or /downloads/guide.pdf)"
+              value={ebPdfUrl}
+              onChange={(e) => setEbPdfUrl(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs"
+            />
             <ImageUploadField label="E-Book Cover Photo" value={ebCover} onChange={setEbCover} />
             <input
               type="text"
@@ -704,11 +907,18 @@ export function CatalogContentPanel({
               onChange={(e) => setEbSummary(e.target.value)}
               className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs"
             />
+            <textarea
+              rows={2}
+              placeholder="Sample chapters / notes (one paragraph per line)..."
+              value={ebSampleText}
+              onChange={(e) => setEbSampleText(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 p-3 text-xs"
+            />
             <button
               type="submit"
-              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white"
+              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700"
             >
-              Publish E-Book
+              {editingEbookId ? 'Save E-Book Changes' : 'Publish E-Book / PDF'}
             </button>
           </form>
 
@@ -718,33 +928,90 @@ export function CatalogContentPanel({
                 key={eb.id}
                 className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <img
                     src={eb.coverImage || '/src/assets/images/course_english_books_1795411661325.jpg'}
                     alt={eb.title}
-                    className="h-12 w-12 rounded-lg object-cover border border-slate-200"
+                    className="h-14 w-12 shrink-0 rounded-lg border border-slate-200 object-cover"
                     referrerPolicy="no-referrer"
                   />
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">{eb.title}</p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-bold text-slate-900">{eb.title}</p>
+                      {eb.status === 'draft' && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                          DRAFT
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500">
-                      {eb.level} · {eb.isFree ? 'FREE' : `৳${eb.price}`}
+                      {eb.level} · {eb.isFree ? 'FREE' : `৳${eb.price}`} · {eb.pagesCount}p
+                      {eb.fileSize ? ` · ${eb.fileSize}` : ''} · Sales: {eb.salesCount ?? 0}
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void softDelete('/api/portal/ebooks', eb.id, eb.title)}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                    confirmId === eb.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
-                  }`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {confirmId === eb.id && <span>Confirm</span>}
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingEbookId(eb.id);
+                      setEbTitle(eb.title);
+                      setEbAuthor(eb.author);
+                      setEbLevel(eb.level);
+                      setEbPages(eb.pagesCount);
+                      setEbFileSize(eb.fileSize || '3.8 MB');
+                      setEbPdfUrl(eb.pdfUrl || '');
+                      setEbIsFree(eb.isFree);
+                      setEbPrice(eb.price);
+                      setEbOriginalPrice(eb.originalPrice);
+                      setEbStatus(eb.status || 'active');
+                      setEbCover(eb.coverImage || '');
+                      setEbSummary(eb.summary);
+                      setEbSampleText(eb.sampleContent.join('\n'));
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void softDelete('/api/portal/ebooks', eb.id, eb.title)}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
+                      confirmId === eb.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
+                    }`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {confirmId === eb.id && <span>Confirm</span>}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
+
+          {ebookTxns.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <h3 className="text-sm font-extrabold text-slate-900">
+                Recent E-Book / PDF Sales ({ebookTxns.length})
+              </h3>
+              <div className="mt-3 space-y-2 text-xs">
+                {ebookTxns.slice(0, 6).map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2"
+                  >
+                    <span>
+                      <strong className="font-mono-tabular text-indigo-700">{tx.invoiceNo}</strong>{' '}
+                      · {tx.payerName} · {tx.gateway}
+                    </span>
+                    <span className="font-mono-tabular font-bold text-emerald-700">
+                      ৳{tx.totalAmount} · {tx.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -754,26 +1021,48 @@ export function CatalogContentPanel({
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              await apiFetch('/api/portal/products', {
-                method: 'POST',
-                body: JSON.stringify({
-                  title: prTitle,
-                  category: prCategory,
-                  price: prPrice,
-                  stock: prStock,
-                  image: prImage,
-                  description: prDesc,
-                }),
-              });
-              setPrTitle('');
-              setPrDesc('');
+              const body = {
+                title: prTitle.trim(),
+                category: prCategory.trim() || 'Books',
+                price: Number(prPrice) || 0,
+                originalPrice: Math.max(Number(prPrice) || 0, Number(prOriginalPrice) || 0),
+                stock: Number(prStock) || 0,
+                image: prImage,
+                description: prDesc.trim(),
+              };
+              if (editingProductId) {
+                await apiFetch(`/api/portal/products/${editingProductId}`, {
+                  method: 'PUT',
+                  body: JSON.stringify(body),
+                });
+                onNotify(`Product "${prTitle}" updated.`);
+              } else {
+                await apiFetch('/api/portal/products', {
+                  method: 'POST',
+                  body: JSON.stringify(body),
+                });
+                onNotify('Product added to Book Store.');
+              }
+              resetProductForm();
               await onRefresh();
-              onNotify('Product added to Book Store.');
             }}
             className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4"
           >
-            <h2 className="text-lg font-extrabold text-slate-900">Create Book / Store Product</h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-extrabold text-slate-900">
+                {editingProductId ? 'Edit Store Product' : 'Create Book / Store Product'}
+              </h2>
+              {editingProductId && (
+                <button
+                  type="button"
+                  onClick={resetProductForm}
+                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
               <input
                 type="text"
                 required
@@ -789,14 +1078,22 @@ export function CatalogContentPanel({
                 placeholder="Category"
                 className="rounded-xl border border-slate-300 px-3 py-2 text-xs"
               />
-              <div className="flex gap-2">
+              <div className="flex gap-2 sm:col-span-2">
                 <input
                   type="number"
                   min={0}
                   value={prPrice}
                   onChange={(e) => setPrPrice(Number(e.target.value))}
                   placeholder="৳ Price"
-                  className="w-1/2 rounded-xl border border-slate-300 px-2.5 py-2 text-xs"
+                  className="w-1/3 rounded-xl border border-slate-300 px-2.5 py-2 text-xs font-bold"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={prOriginalPrice}
+                  onChange={(e) => setPrOriginalPrice(Number(e.target.value))}
+                  placeholder="Orig ৳"
+                  className="w-1/3 rounded-xl border border-slate-300 px-2.5 py-2 text-xs"
                 />
                 <input
                   type="number"
@@ -804,7 +1101,7 @@ export function CatalogContentPanel({
                   value={prStock}
                   onChange={(e) => setPrStock(Number(e.target.value))}
                   placeholder="Stock"
-                  className="w-1/2 rounded-xl border border-slate-300 px-2.5 py-2 text-xs"
+                  className="w-1/3 rounded-xl border border-slate-300 px-2.5 py-2 text-xs"
                 />
               </div>
             </div>
@@ -818,9 +1115,9 @@ export function CatalogContentPanel({
             />
             <button
               type="submit"
-              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white"
+              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700"
             >
-              Add Product
+              {editingProductId ? 'Update Product' : 'Add Product'}
             </button>
           </form>
 
@@ -830,30 +1127,49 @@ export function CatalogContentPanel({
                 key={p.id}
                 className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <img
                     src={p.image}
                     alt={p.title}
-                    className="h-12 w-12 rounded-lg object-cover border border-slate-200"
+                    className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 object-cover"
                     referrerPolicy="no-referrer"
                   />
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">{p.title}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-900">{p.title}</p>
                     <p className="text-xs text-slate-500">
                       {p.category} · ৳{p.price} · Stock {p.stock}
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void softDelete('/api/portal/products', p.id, p.title)}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                    confirmId === p.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
-                  }`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {confirmId === p.id && <span>Confirm</span>}
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProductId(p.id);
+                      setPrTitle(p.title);
+                      setPrCategory(p.category);
+                      setPrPrice(p.price);
+                      setPrOriginalPrice(p.originalPrice);
+                      setPrStock(p.stock);
+                      setPrImage(p.image);
+                      setPrDesc(p.description);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void softDelete('/api/portal/products', p.id, p.title)}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
+                      confirmId === p.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
+                    }`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {confirmId === p.id && <span>Confirm</span>}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -866,24 +1182,46 @@ export function CatalogContentPanel({
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              await apiFetch('/api/portal/instructors', {
-                method: 'POST',
-                body: JSON.stringify({
-                  name: inName,
-                  subject: inSubject,
-                  roleTitle: inRoleTitle,
-                  education: inEducation,
-                  branchId: inBranchId,
-                  avatar: inAvatar,
-                }),
-              });
-              setInName('');
+              const body = {
+                name: inName.trim(),
+                subject: inSubject.trim(),
+                roleTitle: inRoleTitle.trim(),
+                education: inEducation.trim(),
+                branchId: inBranchId,
+                avatar: inAvatar,
+              };
+              if (editingInstructorId) {
+                await apiFetch(`/api/portal/instructors/${editingInstructorId}`, {
+                  method: 'PUT',
+                  body: JSON.stringify(body),
+                });
+                onNotify(`Instructor "${inName}" updated.`);
+              } else {
+                await apiFetch('/api/portal/instructors', {
+                  method: 'POST',
+                  body: JSON.stringify(body),
+                });
+                onNotify('Instructor added to Faculty Panel.');
+              }
+              resetInstructorForm();
               await onRefresh();
-              onNotify('Instructor added to Faculty Panel.');
             }}
             className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4"
           >
-            <h2 className="text-lg font-extrabold text-slate-900">Create Instructor Profile</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-extrabold text-slate-900">
+                {editingInstructorId ? 'Edit Instructor Profile' : 'Create Instructor Profile'}
+              </h2>
+              {editingInstructorId && (
+                <button
+                  type="button"
+                  onClick={resetInstructorForm}
+                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <input
                 type="text"
@@ -933,7 +1271,7 @@ export function CatalogContentPanel({
               type="submit"
               className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white"
             >
-              Add Instructor
+              {editingInstructorId ? 'Save Instructor Changes' : 'Add Instructor'}
             </button>
           </form>
 
@@ -947,7 +1285,7 @@ export function CatalogContentPanel({
                   <img
                     src={ins.avatar}
                     alt={ins.name}
-                    className="h-12 w-12 rounded-full object-cover border border-slate-200"
+                    className="h-12 w-12 rounded-full border border-slate-200 object-cover"
                     referrerPolicy="no-referrer"
                   />
                   <div>
@@ -957,16 +1295,34 @@ export function CatalogContentPanel({
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void softDelete('/api/portal/instructors', ins.id, ins.name)}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                    confirmId === ins.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
-                  }`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {confirmId === ins.id && <span>Confirm</span>}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingInstructorId(ins.id);
+                      setInName(ins.name);
+                      setInSubject(ins.subject);
+                      setInRoleTitle(ins.roleTitle);
+                      setInEducation(ins.education);
+                      setInBranchId(ins.branchId);
+                      setInAvatar(ins.avatar);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void softDelete('/api/portal/instructors', ins.id, ins.name)}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
+                      confirmId === ins.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
+                    }`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {confirmId === ins.id && <span>Confirm</span>}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -979,18 +1335,40 @@ export function CatalogContentPanel({
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              await apiFetch('/api/portal/categories', {
-                method: 'POST',
-                body: JSON.stringify({ name: catName, type: catType, image: catImage }),
-              });
-              setCatName('');
+              const body = { name: catName.trim(), type: catType, image: catImage, active: catActive };
+              if (editingCategoryId) {
+                await apiFetch(`/api/portal/categories/${editingCategoryId}`, {
+                  method: 'PUT',
+                  body: JSON.stringify(body),
+                });
+                onNotify(`Category "${catName}" updated.`);
+              } else {
+                await apiFetch('/api/portal/categories', {
+                  method: 'POST',
+                  body: JSON.stringify(body),
+                });
+                onNotify('Category created.');
+              }
+              resetCategoryForm();
               await onRefresh();
-              onNotify('Category created.');
             }}
             className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4"
           >
-            <h2 className="text-lg font-extrabold text-slate-900">Create Category</h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-extrabold text-slate-900">
+                {editingCategoryId ? 'Edit Category' : 'Create Category'}
+              </h2>
+              {editingCategoryId && (
+                <button
+                  type="button"
+                  onClick={resetCategoryForm}
+                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <input
                 type="text"
                 required
@@ -1011,13 +1389,21 @@ export function CatalogContentPanel({
                 <option value="ebook">E-Book Category</option>
                 <option value="post">Community Post Category</option>
               </select>
+              <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold">
+                <input
+                  type="checkbox"
+                  checked={catActive}
+                  onChange={(e) => setCatActive(e.target.checked)}
+                />
+                Active Category
+              </label>
             </div>
             <ImageUploadField label="Category Icon / Banner" value={catImage} onChange={setCatImage} />
             <button
               type="submit"
               className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white"
             >
-              Create Category
+              {editingCategoryId ? 'Update Category' : 'Create Category'}
             </button>
           </form>
 
@@ -1027,58 +1413,101 @@ export function CatalogContentPanel({
                 key={cat.id}
                 className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"
               >
-                <div>
-                  <span className="text-[10px] font-bold uppercase text-indigo-600">{cat.type}</span>
-                  <p className="text-sm font-bold text-slate-900">{cat.name}</p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase text-indigo-600">{cat.type}</span>
+                    {!cat.active && (
+                      <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                        INACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate text-sm font-bold text-slate-900">{cat.name}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void softDelete('/api/portal/categories', cat.id, cat.name)}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${
-                    confirmId === cat.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
-                  }`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {confirmId === cat.id && <span>Confirm</span>}
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCategoryId(cat.id);
+                      setCatName(cat.name);
+                      setCatType(cat.type);
+                      setCatActive(cat.active);
+                      setCatImage(cat.image || '');
+                    }}
+                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void softDelete('/api/portal/categories', cat.id, cat.name)}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${
+                      confirmId === cat.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
+                    }`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {confirmId === cat.id && <span>Confirm</span>}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* POSTS */}
+      {/* POSTS + COURSE FROM EXISTING POST */}
       {subTab === 'posts' && (
         <div className="space-y-6">
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              await apiFetch('/api/portal/posts', {
-                method: 'POST',
-                body: JSON.stringify({
-                  title: postTitle,
-                  category: postCat,
-                  content: postContent,
-                  image: postImage,
-                }),
-              });
-              setPostTitle('');
-              setPostContent('');
-              setPostImage('');
+              const body = {
+                title: postTitle.trim(),
+                category: postCat.trim() || 'Exam Strategy & Tips',
+                status: postStatus,
+                content: postContent.trim(),
+                image: postImage,
+              };
+              if (editingPostId) {
+                await apiFetch(`/api/portal/posts/${editingPostId}`, {
+                  method: 'PUT',
+                  body: JSON.stringify(body),
+                });
+                onNotify(`Post "${postTitle}" updated.`);
+              } else {
+                await apiFetch('/api/portal/posts', {
+                  method: 'POST',
+                  body: JSON.stringify(body),
+                });
+                onNotify('Community post published.');
+              }
+              resetPostForm();
               await onRefresh();
-              onNotify('Community post published.');
             }}
             className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4"
           >
-            <h2 className="text-lg font-extrabold text-slate-900">Create Blog / Community Post</h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-extrabold text-slate-900">
+                {editingPostId ? 'Edit Blog / Community Post' : 'Create Blog / Community Post'}
+              </h2>
+              {editingPostId && (
+                <button
+                  type="button"
+                  onClick={resetPostForm}
+                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <input
                 type="text"
                 required
                 placeholder="Post Title"
                 value={postTitle}
                 onChange={(e) => setPostTitle(e.target.value)}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold"
+                className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold sm:col-span-1"
               />
               <input
                 type="text"
@@ -1087,6 +1516,14 @@ export function CatalogContentPanel({
                 placeholder="Post Category"
                 className="rounded-xl border border-slate-300 px-3 py-2 text-xs"
               />
+              <select
+                value={postStatus}
+                onChange={(e) => setPostStatus(e.target.value as 'published' | 'draft')}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold"
+              >
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+              </select>
             </div>
             <textarea
               rows={3}
@@ -1099,35 +1536,196 @@ export function CatalogContentPanel({
             <ImageUploadField label="Post Header Image" value={postImage} onChange={setPostImage} />
             <button
               type="submit"
-              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white"
+              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700"
             >
-              Publish Post
+              {editingPostId ? 'Save Post Changes' : 'Publish Post'}
             </button>
           </form>
+
+          {/* One-Click Course from Existing Post Converter Panel */}
+          {convertingPost && (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setCfpBusy(true);
+                try {
+                  await apiFetch('/api/portal/courses/from-post', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      postId: convertingPost.id,
+                      category: cfpCategory,
+                      levelTag: cfpLevelTag,
+                      price: cfpPrice,
+                      originalPrice: cfpOriginalPrice,
+                      status: cfpStatus,
+                    }),
+                  });
+                  setConvertingPost(null);
+                  await onRefresh();
+                  onNotify(`Course created directly from post "${convertingPost.title}"!`);
+                } finally {
+                  setCfpBusy(false);
+                }
+              }}
+              className="rounded-2xl border-2 border-indigo-400 bg-indigo-50/70 p-5 shadow-md space-y-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-indigo-600" />
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">
+                      Create Course from Existing Post
+                    </h3>
+                    <p className="text-xs text-slate-600">
+                      Source Post: <strong>{convertingPost.title}</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConvertingPost(null)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+                <select
+                  value={cfpCategory}
+                  onChange={(e) => setCfpCategory(e.target.value)}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"
+                >
+                  <option value="HSC English">HSC English</option>
+                  <option value="SSC English">SSC English</option>
+                  <option value="IELTS & Spoken">IELTS &amp; Spoken</option>
+                  <option value="Grammar Pro">Grammar Pro</option>
+                  <option value="Admission">Admission</option>
+                  <option value="Combo Packs">Combo Packs</option>
+                </select>
+                <input
+                  type="text"
+                  value={cfpLevelTag}
+                  onChange={(e) => setCfpLevelTag(e.target.value)}
+                  placeholder="Batch Tag"
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={cfpPrice}
+                  onChange={(e) => setCfpPrice(Number(e.target.value))}
+                  placeholder="Price ৳"
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={cfpOriginalPrice}
+                  onChange={(e) => setCfpOriginalPrice(Number(e.target.value))}
+                  placeholder="Orig ৳"
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
+                />
+                <select
+                  value={cfpStatus}
+                  onChange={(e) => setCfpStatus(e.target.value as 'active' | 'draft')}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold"
+                >
+                  <option value="active">Active (Live)</option>
+                  <option value="draft">Draft</option>
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={cfpBusy}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>{cfpBusy ? 'Generating Course...' : 'Convert Post to Course'}</span>
+                </button>
+                {onOpenCoursesSection && (
+                  <button
+                    type="button"
+                    onClick={onOpenCoursesSection}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:underline"
+                  >
+                    <span>View All Courses</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
 
           <div className="space-y-3">
             {posts.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"
               >
-                <div>
-                  <span className="text-[10px] font-bold uppercase text-sky-700">{p.category}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-sky-700">{p.category}</span>
+                    {p.status === 'draft' && (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                        DRAFT
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm font-bold text-slate-900">{p.title}</p>
                   <p className="text-xs text-slate-500">
                     By {p.authorName} · {p.likes} likes · {p.comments.length} comments
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void softDelete('/api/portal/posts', p.id, p.title)}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                    confirmId === p.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
-                  }`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {confirmId === p.id && <span>Confirm</span>}
-                </button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConvertingPost(p);
+                      const hay = `${p.category} ${p.title}`.toLowerCase();
+                      setCfpCategory(
+                        hay.includes('ielts') || hay.includes('spoken')
+                          ? 'IELTS & Spoken'
+                          : hay.includes('hsc')
+                            ? 'HSC English'
+                            : hay.includes('ssc')
+                              ? 'SSC English'
+                              : hay.includes('admission')
+                                ? 'Admission'
+                                : 'Grammar Pro'
+                      );
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>Create Course from Post</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPostId(p.id);
+                      setPostTitle(p.title);
+                      setPostCat(p.category);
+                      setPostStatus(p.status === 'draft' ? 'draft' : 'published');
+                      setPostContent(p.content);
+                      setPostImage(p.image || '');
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void softDelete('/api/portal/posts', p.id, p.title)}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold ${
+                      confirmId === p.id ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
+                    }`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {confirmId === p.id && <span>Confirm</span>}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1158,7 +1756,7 @@ export function CatalogContentPanel({
             className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4"
           >
             <h2 className="text-lg font-extrabold text-slate-900">
-              Promo Coupon Engine (Courses & Store Products)
+              Promo Coupon Engine (Courses, E-Books &amp; Store Products)
             </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
               <input

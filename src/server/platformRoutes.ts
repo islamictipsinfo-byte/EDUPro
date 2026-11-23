@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import {
+  buildCourseDraftFromPost,
   calculateDiscountedPrice,
   calculateNetPayroll,
   calculateOrderTotalWithCoupon,
@@ -14,6 +15,10 @@ import {
   sanitizeSafeUrl,
   validateScormManifest,
 } from '../lib/domain';
+import {
+  computeAuditLogSummary,
+  filterAuditLogs,
+} from '../lib/auditLogs';
 import type {
   ApiPlugin,
   AttendanceRecord,
@@ -40,6 +45,7 @@ import {
   recordAuditLog,
   resetDbToDefaults,
   saveDb,
+  subscribeAuditLogs,
   verifyBackupSnapshotIntegrity,
   type StoredUser,
 } from './store';
@@ -162,6 +168,7 @@ export function createPlatformRouter(
     const {
       referenceType,
       courseId,
+      ebookId,
       branchId,
       items,
       deliveryMode,
@@ -216,12 +223,79 @@ export function createPlatformRouter(
       ? db.coupons.find((c) => c.code.toUpperCase() === couponUpper && c.active)
       : undefined;
 
+    if (referenceType === 'ebook') {
+      const ebook = db.ebooks.find((e) => e.id === ebookId && e.status !== 'draft');
+      if (!ebook) {
+        res.status(404).json({ error: 'E-Book not found.' });
+        return;
+      }
+      const pricing = calculateDiscountedPrice(ebook.price, ebook.originalPrice || ebook.price, coupon);
+      const status: PaymentTransaction['status'] =
+        isCash || isManual ? 'pending_verification' : 'completed';
+
+      const claimed = db.claimedEbooksByUser[user.id] ?? [];
+      if (!claimed.includes(ebook.id)) {
+        claimed.push(ebook.id);
+        db.claimedEbooksByUser[user.id] = claimed;
+      }
+      ebook.salesCount = (ebook.salesCount ?? 0) + 1;
+
+      const txn: PaymentTransaction = {
+        id: `txn-${Date.now()}`,
+        invoiceNo,
+        referenceType: 'ebook',
+        referenceId: ebook.id,
+        userId: user.id,
+        payerName: user.name,
+        gateway: safeGateway,
+        walletOrLast4: String(walletOrLast4 || phone || user.phone).slice(-14),
+        trxId: cleanTrx || `CASH-${Date.now().toString().slice(-5)}`,
+        subtotal: pricing.basePrice,
+        discountAmount: pricing.couponDiscountAmount,
+        couponCode: pricing.appliedCouponCode ?? undefined,
+        deliveryFee: 0,
+        totalAmount: pricing.finalPrice,
+        status,
+        createdAt: new Date().toISOString(),
+      };
+      db.transactions.unshift(txn);
+      db.financialRecords.unshift({
+        id: `fin-${Date.now()}`,
+        type: 'income',
+        category: 'Digital E-Book & PDF Sales',
+        title: `${ebook.title} (${safeGateway}) — ${user.name}`,
+        amount: pricing.finalPrice,
+        branchId: user.branchId,
+        date: new Date().toISOString().slice(0, 10),
+        recordedBy: user.name,
+      });
+
+      recordAuditLog(db, user, 'EBOOK_CHECKOUT', ebook.title, `${safeGateway} · ৳${pricing.finalPrice} · ${invoiceNo}`);
+      saveDb(db);
+      res.status(201).json({ transaction: txn, ebook, claimedEbookIds: claimed });
+      return;
+    }
+
     if (referenceType === 'course') {
       const course = db.courses.find((c) => c.id === courseId && c.status === 'active');
       if (!course) {
         res.status(404).json({ error: 'Course not found.' });
         return;
       }
+
+      const activeFallbackBranch = db.branches.find((b) => b.status === 'active')?.id ?? '';
+      const rawBranchId = String(branchId ?? '').trim();
+      if (rawBranchId && rawBranchId !== 'online') {
+        const matchedBranch = db.branches.find((b) => b.id === rawBranchId);
+        if (matchedBranch && matchedBranch.status !== 'active') {
+          res.status(400).json({
+            error: `Branch "${matchedBranch.name}" is currently inactive. Please select an active campus.`,
+          });
+          return;
+        }
+      }
+      const resolvedCourseBranchId = rawBranchId || activeFallbackBranch || 'online';
+
       const pricing = calculateDiscountedPrice(course.price, course.originalPrice, coupon);
       const status: Enrollment['status'] = isCash || isManual ? 'pending' : 'approved';
 
@@ -230,6 +304,7 @@ export function createPlatformRouter(
       );
       if (enrollment) {
         enrollment.status = status;
+        enrollment.branchId = resolvedCourseBranchId;
         enrollment.paymentMethod = safeGateway;
         enrollment.trxId = cleanTrx || 'CASH-DESK';
         enrollment.invoiceNo = invoiceNo;
@@ -243,7 +318,7 @@ export function createPlatformRouter(
           studentEmail: user.email,
           courseId: course.id,
           courseTitle: course.title,
-          branchId: String(branchId || user.branchId || 'br-mirpur'),
+          branchId: resolvedCourseBranchId,
           paymentMethod: safeGateway,
           trxId: cleanTrx || 'CASH-DESK',
           invoiceNo,
@@ -319,6 +394,16 @@ export function createPlatformRouter(
       res.status(400).json({ error: 'Delivery address is required for home delivery.' });
       return;
     }
+    let resolvedPickupBranchId: string | null = null;
+    if (mode === 'branch_pickup') {
+      const pickupTarget = String(branchPickupId ?? '').trim();
+      const pickupBranch = db.branches.find((b) => b.id === pickupTarget && b.status === 'active');
+      if (!pickupBranch) {
+        res.status(400).json({ error: 'Selected pickup branch is currently inactive or unavailable.' });
+        return;
+      }
+      resolvedPickupBranchId = pickupBranch.id;
+    }
 
     const totals = calculateOrderTotalWithCoupon(orderItems, mode, coupon);
     for (const oi of orderItems) {
@@ -333,7 +418,7 @@ export function createPlatformRouter(
       phone: String(phone || user.phone).trim(),
       deliveryAddress:
         mode === 'branch_pickup' ? 'Branch Pickup Counter' : String(deliveryAddress).trim(),
-      branchPickupId: mode === 'branch_pickup' ? String(branchPickupId || 'br-mirpur') : null,
+      branchPickupId: resolvedPickupBranchId,
       items: orderItems,
       deliveryFee: totals.deliveryFee,
       discountAmount: totals.discountAmount,
@@ -726,22 +811,66 @@ export function createPlatformRouter(
 
   // ---------------- CATALOG & CONTENT CREATORS (IMAGES + SOFT DELETE TO RECYCLE BIN) ----------------
 
+  router.get('/api/ebooks/:id/download', requireAuth, (req: AuthedRequest, res) => {
+    const db = getDb();
+    const user = req.authUser!;
+    const ebook = db.ebooks.find((e) => e.id === req.params.id);
+    if (!ebook) return void res.status(404).json({ error: 'E-Book not found.' });
+    const owned = (db.claimedEbooksByUser[user.id] ?? []).includes(ebook.id);
+    if (user.role !== 'admin' && !ebook.isFree && ebook.price > 0 && !owned) {
+      return void res.status(403).json({ error: 'Purchase required to download this PDF.' });
+    }
+    res.json({
+      ebook,
+      pdfUrl: sanitizeSafeUrl(ebook.pdfUrl ?? '', ''),
+      contentText: [
+        `${ebook.title} (${ebook.level})`,
+        `Author: ${ebook.author} · Pages: ${ebook.pagesCount}`,
+        '',
+        ebook.summary,
+        '',
+        ...ebook.sampleContent,
+      ].join('\n\n'),
+    });
+  });
+
   router.post('/api/portal/ebooks', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
-    const { title, level, isFree, price, originalPrice, author, pagesCount, coverImage, summary, sampleContent } = req.body ?? {};
+    const {
+      title,
+      level,
+      isFree,
+      price,
+      originalPrice,
+      author,
+      pagesCount,
+      pdfUrl,
+      fileSize,
+      status,
+      coverImage,
+      summary,
+      sampleContent,
+    } = req.body ?? {};
     if (!String(title ?? '').trim()) {
       res.status(400).json({ error: 'E-Book title is required.' });
       return;
     }
     const db = getDb();
+    const free = Boolean(isFree);
+    const numPrice = free ? 0 : Math.max(0, Number(price) || 190);
+    const numOrig = free ? 0 : Math.max(numPrice, Number(originalPrice) || Math.round(numPrice * 1.5));
     const ebook: Ebook = {
       id: `ebk-${Date.now()}`,
       title: String(title).trim(),
       level: String(level || 'HSC 27').trim(),
-      isFree: Boolean(isFree),
-      price: Boolean(isFree) ? 0 : Math.max(0, Number(price) || 190),
-      originalPrice: Math.max(0, Number(originalPrice) || 350),
+      isFree: free,
+      price: numPrice,
+      originalPrice: numOrig,
       author: String(author || 'Aloms English Academic Team').trim(),
       pagesCount: Math.max(10, Number(pagesCount) || 120),
+      pdfUrl: sanitizeSafeUrl(String(pdfUrl ?? ''), ''),
+      fileSize: String(fileSize || '2.8 MB').trim(),
+      salesCount: 0,
+      status: status === 'draft' ? 'draft' : 'active',
       coverImage: sanitizeSafeUrl(String(coverImage ?? ''), '/src/assets/images/course_english_books_1795411661325.jpg'),
       summary: String(summary || 'Structured bilingual digital E-Book with solved board questions.').trim(),
       sampleContent: Array.isArray(sampleContent) && sampleContent.length
@@ -749,9 +878,48 @@ export function createPlatformRouter(
         : ['Chapter 1: Grammar Rules & Solved Board Patterns', 'Chapter 2: Guided Practice Exercises'],
     };
     db.ebooks.unshift(ebook);
-    recordAuditLog(db, req.authUser!, 'EBOOK_CREATE', ebook.title, ebook.level);
+    recordAuditLog(db, req.authUser!, 'EBOOK_CREATE', ebook.title, `${ebook.level} · ${ebook.isFree ? 'FREE' : `৳${ebook.price}`}`);
     saveDb(db);
     res.status(201).json({ ebook });
+  });
+
+  router.put('/api/portal/ebooks/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+    const db = getDb();
+    const ebook = db.ebooks.find((e) => e.id === req.params.id);
+    if (!ebook) return void res.status(404).json({ error: 'E-Book not found.' });
+
+    const body = req.body ?? {};
+    if (typeof body.title === 'string' && body.title.trim()) ebook.title = body.title.trim();
+    if (typeof body.level === 'string' && body.level.trim()) ebook.level = body.level.trim();
+    if (typeof body.author === 'string' && body.author.trim()) ebook.author = body.author.trim();
+    if (typeof body.summary === 'string') ebook.summary = body.summary.trim();
+    if (typeof body.fileSize === 'string' && body.fileSize.trim()) ebook.fileSize = body.fileSize.trim();
+    if (body.pagesCount !== undefined) ebook.pagesCount = Math.max(1, Number(body.pagesCount) || ebook.pagesCount);
+    if (body.pdfUrl !== undefined) ebook.pdfUrl = sanitizeSafeUrl(String(body.pdfUrl ?? ''), '');
+    if (body.coverImage !== undefined) {
+      ebook.coverImage = sanitizeSafeUrl(
+        String(body.coverImage ?? ''),
+        ebook.coverImage || '/src/assets/images/course_english_books_1795411661325.jpg'
+      );
+    }
+    if (body.status === 'active' || body.status === 'draft') ebook.status = body.status;
+    if (body.isFree !== undefined) ebook.isFree = Boolean(body.isFree);
+    if (ebook.isFree) {
+      ebook.price = 0;
+      ebook.originalPrice = 0;
+    } else {
+      if (body.price !== undefined) ebook.price = Math.max(0, Number(body.price) || 0);
+      if (body.originalPrice !== undefined) {
+        ebook.originalPrice = Math.max(ebook.price, Number(body.originalPrice) || ebook.price);
+      }
+    }
+    if (Array.isArray(body.sampleContent) && body.sampleContent.length > 0) {
+      ebook.sampleContent = body.sampleContent.map(String);
+    }
+
+    recordAuditLog(db, req.authUser!, 'EBOOK_UPDATE', ebook.title, `${ebook.status} · ৳${ebook.price}`);
+    saveDb(db);
+    res.json({ ebook });
   });
 
   router.delete('/api/portal/ebooks/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
@@ -779,12 +947,13 @@ export function createPlatformRouter(
       return;
     }
     const db = getDb();
+    const safePrice = Math.max(0, Number(price) || 450);
     const product: Product = {
       id: `prd-${Date.now()}`,
       title: String(title).trim(),
       category: String(category || 'Books').trim(),
-      price: Math.max(0, Number(price) || 450),
-      originalPrice: Math.max(0, Number(originalPrice) || 650),
+      price: safePrice,
+      originalPrice: Math.max(safePrice, Number(originalPrice) || Math.round(safePrice * 1.35)),
       stock: Math.max(0, Number(stock) || 50),
       image: sanitizeSafeUrl(String(image ?? ''), '/src/assets/images/course_english_books_1795411661325.jpg'),
       description: String(description || 'Printed study guide by Aloms English Center.').trim(),
@@ -793,6 +962,30 @@ export function createPlatformRouter(
     recordAuditLog(db, req.authUser!, 'PRODUCT_CREATE', product.title, `৳${product.price}`);
     saveDb(db);
     res.status(201).json({ product });
+  });
+
+  router.put('/api/portal/products/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+    const db = getDb();
+    const product = db.products.find((p) => p.id === req.params.id);
+    if (!product) return void res.status(404).json({ error: 'Product not found.' });
+    const body = req.body ?? {};
+    if (typeof body.title === 'string' && body.title.trim()) product.title = body.title.trim();
+    if (typeof body.category === 'string' && body.category.trim()) product.category = body.category.trim();
+    if (typeof body.description === 'string') product.description = body.description.trim();
+    if (body.price !== undefined) product.price = Math.max(0, Number(body.price) || 0);
+    if (body.originalPrice !== undefined) {
+      product.originalPrice = Math.max(product.price, Number(body.originalPrice) || product.price);
+    }
+    if (body.stock !== undefined) product.stock = Math.max(0, Number(body.stock) || 0);
+    if (body.image !== undefined) {
+      product.image = sanitizeSafeUrl(
+        String(body.image ?? ''),
+        product.image || '/src/assets/images/course_english_books_1795411661325.jpg'
+      );
+    }
+    recordAuditLog(db, req.authUser!, 'PRODUCT_UPDATE', product.title, `৳${product.price} · stock ${product.stock}`);
+    saveDb(db);
+    res.json({ product });
   });
 
   router.delete('/api/portal/products/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
@@ -837,6 +1030,26 @@ export function createPlatformRouter(
     res.status(201).json({ instructor });
   });
 
+  router.put('/api/portal/instructors/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+    const db = getDb();
+    const instructor = db.instructors.find((i) => i.id === req.params.id);
+    if (!instructor) return void res.status(404).json({ error: 'Instructor not found.' });
+    const body = req.body ?? {};
+    if (typeof body.name === 'string' && body.name.trim()) instructor.name = body.name.trim();
+    if (typeof body.subject === 'string' && body.subject.trim()) instructor.subject = body.subject.trim();
+    if (typeof body.roleTitle === 'string' && body.roleTitle.trim()) instructor.roleTitle = body.roleTitle.trim();
+    if (typeof body.education === 'string' && body.education.trim()) instructor.education = body.education.trim();
+    if (typeof body.bio === 'string') instructor.bio = body.bio.trim();
+    if (body.panel === 'Head Faculty' || body.panel === 'Branch Faculty') instructor.panel = body.panel;
+    if (typeof body.branchId === 'string' && body.branchId.trim()) instructor.branchId = body.branchId.trim();
+    if (body.avatar !== undefined) {
+      instructor.avatar = sanitizeSafeUrl(String(body.avatar ?? ''), instructor.avatar);
+    }
+    recordAuditLog(db, req.authUser!, 'INSTRUCTOR_UPDATE', instructor.name, instructor.subject);
+    saveDb(db);
+    res.json({ instructor });
+  });
+
   router.delete('/api/portal/instructors/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
     const db = getDb();
     const idx = db.instructors.findIndex((i) => i.id === req.params.id);
@@ -877,6 +1090,28 @@ export function createPlatformRouter(
     res.status(201).json({ category, categories: db.categories });
   });
 
+  router.put('/api/portal/categories/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+    const db = getDb();
+    const category = db.categories.find((c) => c.id === req.params.id);
+    if (!category) return void res.status(404).json({ error: 'Category not found.' });
+    const body = req.body ?? {};
+    if (typeof body.name === 'string' && body.name.trim()) {
+      category.name = body.name.trim();
+      category.slug = category.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+    if (['course', 'product', 'ebook', 'post'].includes(body.type)) {
+      category.type = body.type;
+    }
+    if (typeof body.description === 'string') category.description = body.description.trim();
+    if (body.active !== undefined) category.active = Boolean(body.active);
+    if (body.image !== undefined) {
+      category.image = sanitizeSafeUrl(String(body.image ?? ''), category.image || '/src/assets/images/hero_hsc_english_1795411661478.jpg');
+    }
+    recordAuditLog(db, req.authUser!, 'CATEGORY_UPDATE', category.name, category.type);
+    saveDb(db);
+    res.json({ category, categories: db.categories });
+  });
+
   router.delete('/api/portal/categories/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
     const db = getDb();
     const idx = db.categories.findIndex((c) => c.id === req.params.id);
@@ -896,7 +1131,7 @@ export function createPlatformRouter(
   });
 
   router.post('/api/portal/posts', requireAuth, requireRole(['admin', 'teacher', 'student']), (req: AuthedRequest, res) => {
-    const { title, category, content, image } = req.body ?? {};
+    const { title, category, content, image, status } = req.body ?? {};
     if (!String(title ?? '').trim() || !String(content ?? '').trim()) {
       res.status(400).json({ error: 'Post title and content are required.' });
       return;
@@ -914,13 +1149,28 @@ export function createPlatformRouter(
       likes: 1,
       likedByUserIds: [req.authUser!.id],
       comments: [],
-      status: 'published',
+      status: status === 'draft' ? 'draft' : 'published',
       createdAt: new Date().toISOString(),
     };
     db.posts.unshift(post);
     recordAuditLog(db, req.authUser!, 'POST_CREATE', post.title, post.category);
     saveDb(db);
     res.status(201).json({ post });
+  });
+
+  router.put('/api/portal/posts/:id', requireAuth, requireRole(['admin', 'teacher']), (req: AuthedRequest, res) => {
+    const db = getDb();
+    const post = db.posts.find((p) => p.id === req.params.id);
+    if (!post) return void res.status(404).json({ error: 'Post not found.' });
+    const body = req.body ?? {};
+    if (typeof body.title === 'string' && body.title.trim()) post.title = body.title.trim();
+    if (typeof body.category === 'string' && body.category.trim()) post.category = body.category.trim();
+    if (typeof body.content === 'string' && body.content.trim()) post.content = body.content.trim();
+    if (body.image !== undefined) post.image = sanitizeSafeUrl(String(body.image ?? ''), '');
+    if (body.status === 'published' || body.status === 'draft') post.status = body.status;
+    recordAuditLog(db, req.authUser!, 'POST_UPDATE', post.title, post.category);
+    saveDb(db);
+    res.json({ post });
   });
 
   router.delete('/api/portal/posts/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
@@ -939,6 +1189,32 @@ export function createPlatformRouter(
     });
     saveDb(db);
     res.json({ deletedId: removed.id });
+  });
+
+  router.post('/api/portal/courses/from-post', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+    const postId = String(req.body?.postId ?? '').trim();
+    const db = getDb();
+    const post = db.posts.find((p) => p.id === postId);
+    if (!post) return void res.status(404).json({ error: 'Source post not found.' });
+
+    const course = buildCourseDraftFromPost(post, db.courses, db.branches, {
+      price: req.body?.price,
+      originalPrice: req.body?.originalPrice,
+      category: req.body?.category,
+      levelTag: req.body?.levelTag,
+      status: req.body?.status === 'active' ? 'active' : 'draft',
+      isCombo: Boolean(req.body?.isCombo),
+    });
+    db.courses.unshift(course);
+    recordAuditLog(
+      db,
+      req.authUser!,
+      'COURSE_FROM_POST',
+      course.title,
+      `From post "${post.title}" (${course.status})`
+    );
+    saveDb(db);
+    res.status(201).json({ course });
   });
 
   router.post('/api/portal/coupons', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
@@ -1270,6 +1546,7 @@ export function createPlatformRouter(
     else if (item.entityType === 'branch' && !db.branches.some((x) => x.id === snap.id)) db.branches.push(snap);
     else if (item.entityType === 'payment_gateway' && !db.paymentGateways.some((x) => x.id === snap.id)) db.paymentGateways.push(snap);
     else if (item.entityType === 'plugin' && !db.plugins.some((x) => x.id === snap.id)) db.plugins.unshift(snap);
+    else if (item.entityType === 'enrollment' && !db.enrollments.some((x) => x.id === snap.id)) db.enrollments.unshift(snap);
 
     recordAuditLog(db, req.authUser!, 'RECYCLE_BIN_RESTORE', item.entityType, item.label);
     saveDb(db);
@@ -1422,7 +1699,9 @@ export function createPlatformRouter(
       });
     }
 
-    recordAuditLog(db, req.authUser!, 'PAYMENT_TXN_STATUS', txn.invoiceNo, `${prev} -> ${nextStatus}`);
+    if (prev !== nextStatus) {
+      recordAuditLog(db, req.authUser!, 'PAYMENT_TXN_STATUS', txn.invoiceNo, `${prev} -> ${nextStatus}`);
+    }
     saveDb(db);
     res.json({ transaction: txn, transactions: db.transactions });
   });
@@ -1612,6 +1891,70 @@ export function createPlatformRouter(
     recordAuditLog(db, req.authUser!, 'BROADCAST_SEND', camp.title, `${camp.channel} -> ${camp.audience}`);
     saveDb(db);
     res.status(201).json({ campaign: camp, campaigns: db.campaigns });
+  });
+
+  // ---------------- REAL-TIME SYSTEM ACTIVITY LOGS (ADMIN AUDIT STREAM) ----------------
+
+  router.get('/api/portal/audit-logs', requireAuth, requireRole(['admin']), (req, res) => {
+    const db = getDb();
+    const rawCat = String(req.query.category ?? 'all').trim();
+    const category =
+      rawCat === 'login' || rawCat === 'course' || rawCat === 'payment' || rawCat === 'system'
+        ? rawCat
+        : 'all';
+    const rawRole = String(req.query.role ?? 'all').trim();
+    const actorRole =
+      rawRole === 'admin' ||
+      rawRole === 'branch_manager' ||
+      rawRole === 'teacher' ||
+      rawRole === 'student' ||
+      rawRole === 'guardian'
+        ? rawRole
+        : 'all';
+    const searchQuery = String(req.query.q ?? '').trim();
+    const limit = Math.max(10, Math.min(250, Number(req.query.limit) || 120));
+
+    const filtered = filterAuditLogs(db.auditLogs, { category, actorRole, searchQuery }).slice(0, limit);
+    const summary = computeAuditLogSummary(db.auditLogs);
+
+    res.json({
+      auditLogs: filtered,
+      summary,
+      serverTime: new Date().toISOString(),
+    });
+  });
+
+  router.get('/api/portal/audit-logs/stream', requireAuth, requireRole(['admin']), (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
+
+    const db = getDb();
+    const initPayload = {
+      logs: db.auditLogs.slice(0, 120),
+      summary: computeAuditLogSummary(db.auditLogs),
+      serverTime: new Date().toISOString(),
+    };
+    res.write(`event: init\ndata: ${JSON.stringify(initPayload)}\n\n`);
+
+    const unsubscribe = subscribeAuditLogs((entry) => {
+      if (res.writableEnded) return;
+      res.write(`event: log\ndata: ${JSON.stringify(entry)}\n\n`);
+    });
+
+    const heartbeat = setInterval(() => {
+      if (res.writableEnded) return;
+      res.write(`: ping ${Date.now()}\n\n`);
+    }, 20000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
   });
 
   return router;

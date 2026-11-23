@@ -1,8 +1,12 @@
 import { Minus, Plus, ShoppingBag, Tag, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { calculateOrderTotalWithCoupon } from '../lib/domain';
+import {
+  calculateOrderTotalWithCoupon,
+  filterActiveBranches,
+  resolveDefaultActiveBranchId,
+} from '../lib/domain';
 import type { Coupon } from '../types';
 import { FourStepPaymentModal } from './FourStepPaymentModal';
 
@@ -13,9 +17,13 @@ interface CartDrawerProps {
 export function CartDrawer({ navigate }: CartDrawerProps) {
   const { items, isOpen, setIsOpen, updateQuantity, removeItem, clearCart } = useCart();
   const { user, bootstrap } = useAuth();
+  const activeBranches = useMemo(
+    () => filterActiveBranches(bootstrap?.branches),
+    [bootstrap?.branches]
+  );
   const [deliveryMode, setDeliveryMode] = useState<'home' | 'branch_pickup'>('home');
-  const [branchPickupId, setBranchPickupId] = useState(
-    bootstrap?.branches[0]?.id || 'br-mirpur'
+  const [branchPickupId, setBranchPickupId] = useState(() =>
+    resolveDefaultActiveBranchId(bootstrap?.branches)
   );
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -25,6 +33,13 @@ export function CartDrawer({ navigate }: CartDrawerProps) {
   const [error, setError] = useState<string | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [successInvoice, setSuccessInvoice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBranchPickupId((prev) => resolveDefaultActiveBranchId(activeBranches, prev));
+    if (activeBranches.length === 0 && deliveryMode === 'branch_pickup') {
+      setDeliveryMode('home');
+    }
+  }, [activeBranches, deliveryMode]);
 
   if (!isOpen && !checkoutOpen) return null;
 
@@ -241,14 +256,15 @@ export function CartDrawer({ navigate }: CartDrawerProps) {
                         </button>
                         <button
                           type="button"
+                          disabled={activeBranches.length === 0}
                           onClick={() => setDeliveryMode('branch_pickup')}
-                          className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                          className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                             deliveryMode === 'branch_pickup'
                               ? 'border-sky-600 bg-sky-50 text-sky-700'
                               : 'border-slate-200 text-slate-600'
                           }`}
                         >
-                          Branch Pickup (Free)
+                          {activeBranches.length > 0 ? 'Branch Pickup (Free)' : 'Pickup Unavailable'}
                         </button>
                       </div>
                     </div>
@@ -259,20 +275,26 @@ export function CartDrawer({ navigate }: CartDrawerProps) {
                           htmlFor="cart-branch"
                           className="mb-1 block text-xs font-semibold text-slate-700"
                         >
-                          Select Pickup Branch
+                          Select Active Pickup Branch
                         </label>
-                        <select
-                          id="cart-branch"
-                          value={branchPickupId}
-                          onChange={(e) => setBranchPickupId(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        >
-                          {(bootstrap?.branches ?? []).map((b) => (
-                            <option key={b.id} value={b.id}>
-                              {b.name}
-                            </option>
-                          ))}
-                        </select>
+                        {activeBranches.length > 0 ? (
+                          <select
+                            id="cart-branch"
+                            value={branchPickupId}
+                            onChange={(e) => setBranchPickupId(e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            {activeBranches.map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                            No active pickup branches currently available.
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <div>

@@ -18,6 +18,8 @@ import { useAuth } from '../context/AuthContext';
 import {
   calculateDiscountedPrice,
   computeBatchSeatUsage,
+  filterActiveBranches,
+  resolveDefaultActiveBranchId,
   toSafeVideoEmbedUrl,
 } from '../lib/domain';
 import type {
@@ -43,7 +45,7 @@ interface CourseDetailPayload {
 }
 
 export function CourseDetailPage({ slug, navigate }: CourseDetailPageProps) {
-  const { user, apiFetch, refreshBootstrap } = useAuth();
+  const { user, refreshBootstrap } = useAuth();
   const [data, setData] = useState<CourseDetailPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'demo'>('overview');
@@ -56,7 +58,7 @@ export function CourseDetailPage({ slug, navigate }: CourseDetailPageProps) {
   const [couponError, setCouponError] = useState<string | null>(null);
 
   const [enrollOpen, setEnrollOpen] = useState(false);
-  const [selectedBranchId, setSelectedBranchId] = useState('br-mirpur');
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [enrollStatus, setEnrollStatus] = useState<{ type: 'ok' | 'err'; msg: string } | null>(
     null
   );
@@ -68,8 +70,10 @@ export function CourseDetailPage({ slug, navigate }: CourseDetailPageProps) {
       .then((r) => (r.ok ? r.json() : null))
       .then((payload) => {
         if (active && payload) {
-          setData(payload);
-          if (payload.branches?.length) setSelectedBranchId(payload.branches[0].id);
+          const typedPayload = payload as CourseDetailPayload;
+          const activeList = filterActiveBranches(typedPayload.branches ?? []);
+          setData({ ...typedPayload, branches: activeList });
+          setSelectedBranchId(resolveDefaultActiveBranchId(activeList));
         }
       })
       .finally(() => {

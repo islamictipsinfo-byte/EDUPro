@@ -19,7 +19,7 @@ export function LoginPage({ navigate }: LoginPageProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
 
   // Login state
-  const [email, setEmail] = useState('student@alomsenglish.com');
+  const [email, setEmail] = useState('admin@alomsenglish.com');
   const [password, setPassword] = useState('Aloms@2026');
   const [submitting, setSubmitting] = useState(false);
 

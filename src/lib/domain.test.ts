@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_DASHBOARD_CONFIG,
+  buildCourseDraftFromPost,
   calculateDiscountedPrice,
   calculateNetPayroll,
   calculateOrderTotal,
@@ -11,22 +13,25 @@ import {
   computeAverageRating,
   computeBatchSeatUsage,
   computeHomepageStats,
+  filterActiveBranches,
   filterCourses,
   filterLessonsByTypeAndBatch,
   gradeExamSubmission,
   maskLeaderboardName,
   maskSecretValue,
   filterActivePaymentGateways,
+  normalizeDashboardConfig,
   normalizeHeaderMenu,
   parseBulkQuestionBank,
   parseImageUploadDataUrl,
   reorderListItem,
+  resolveDefaultActiveBranchId,
   sanitizeSafeUrl,
   splitCoursesIntoSections,
   toSafeVideoEmbedUrl,
   validateScormManifest,
 } from './domain';
-import type { Course, CourseBatch, CourseLesson, ExamQuestion, HomepageConfig } from '../types';
+import type { Branch, CommunityPost, Course, CourseBatch, CourseLesson, ExamQuestion, HomepageConfig } from '../types';
 
 test('calculateDiscountedPrice computes base discount and valid active coupon', () => {
   const res = calculateDiscountedPrice(3000, 5000, {
@@ -98,6 +103,11 @@ test('canRoleAccessPortalSection enforces strict multi-role RBAC boundaries', ()
   assert.equal(canRoleAccessPortalSection('student', 'users'), false);
   assert.equal(canRoleAccessPortalSection('guardian', 'guardian_monitor'), true);
   assert.equal(canRoleAccessPortalSection('guardian', 'exams'), false);
+  assert.equal(canRoleAccessPortalSection('admin', 'activity_logs'), true);
+  assert.equal(canRoleAccessPortalSection('branch_manager', 'activity_logs'), false);
+  assert.equal(canRoleAccessPortalSection('teacher', 'activity_logs'), false);
+  assert.equal(canRoleAccessPortalSection('student', 'activity_logs'), false);
+  assert.equal(canRoleAccessPortalSection('guardian', 'activity_logs'), false);
 });
 
 test('filterCourses filters active courses by category, combo flag, levelTag, drafts, and sort', () => {
@@ -432,6 +442,127 @@ test('maskSecretValue, filterActivePaymentGateways, and payments portal RBAC wor
   assert.equal(canRoleAccessPortalSection('student', 'payments'), false);
   assert.equal(canRoleAccessPortalSection('teacher', 'payments'), false);
 });
+
+test('filterActiveBranches and resolveDefaultActiveBranchId strictly exclude inactive campuses', () => {
+  const branches: Branch[] = [
+    {
+      id: 'br-1',
+      name: 'Uttara Campus',
+      code: 'UTT',
+      city: 'Dhaka',
+      address: 'Sector 7',
+      phone: '01700',
+      managerName: 'Karim',
+      activeStudents: 200,
+      status: 'inactive',
+    },
+    {
+      id: 'br-2',
+      name: 'Mirpur Campus',
+      code: 'MPR',
+      city: 'Dhaka',
+      address: 'DOHS',
+      phone: '01711',
+      managerName: 'Rahim',
+      activeStudents: 450,
+      status: 'active',
+    },
+  ];
+  const active = filterActiveBranches(branches);
+  assert.equal(active.length, 1);
+  assert.equal(active[0].id, 'br-2');
+  assert.equal(resolveDefaultActiveBranchId(branches, 'br-1'), 'br-2');
+  assert.equal(resolveDefaultActiveBranchId([branches[0]]), '');
+});
+
+test('normalizeDashboardConfig merges partial settings, validates hex colors, sanitizes images, and enforces valid themes/presets', () => {
+  const custom = normalizeDashboardConfig({
+    themeMode: 'midnight_dark',
+    accentPreset: 'emerald_teal',
+    brandTitle: 'AEC Pro Studio',
+    brandBadge: 'v4.0',
+    heroTitle: 'Hello Director',
+    kpiLabels: { students: 'Learners' },
+    colors: {
+      heroStart: '#123456',
+      heroEnd: 'javascript:alert(1)',
+      sidebarStart: '#0a0b0c',
+    },
+    images: {
+      heroAvatarUrl: '/uploads/custom-avatar.png',
+      heroBannerBgUrl: 'javascript:alert(9)',
+      brandLogoUrl: '/uploads/logo.png',
+    },
+    widgets: { liveClassNow: false, quickActions: true },
+  });
+  assert.equal(custom.themeMode, 'midnight_dark');
+  assert.equal(custom.accentPreset, 'emerald_teal');
+  assert.equal(custom.brandTitle, 'AEC Pro Studio');
+  assert.equal(custom.brandBadge, 'v4.0');
+  assert.equal(custom.heroTitle, 'Hello Director');
+  assert.equal(custom.heroQuote, DEFAULT_DASHBOARD_CONFIG.heroQuote);
+  assert.equal(custom.kpiLabels.students, 'Learners');
+  assert.equal(custom.kpiLabels.courses, 'Total Courses');
+  assert.equal(custom.colors.heroStart, '#123456');
+  assert.equal(custom.colors.heroEnd, DEFAULT_DASHBOARD_CONFIG.colors.heroEnd);
+  assert.equal(custom.colors.sidebarStart, '#0A0B0C');
+  assert.equal(custom.images.heroAvatarUrl, '/uploads/custom-avatar.png');
+  assert.equal(custom.images.heroBannerBgUrl, DEFAULT_DASHBOARD_CONFIG.images.heroBannerBgUrl);
+  assert.equal(custom.images.brandLogoUrl, '/uploads/logo.png');
+  assert.equal(custom.widgets.liveClassNow, false);
+  assert.equal(custom.widgets.heroBanner, true);
+  assert.equal(custom.widgets.systemActivityLogs, true);
+});
+
+test('buildCourseDraftFromPost maps community post into structured course draft with active branches', () => {
+  const post: CommunityPost = {
+    id: 'post-44',
+    title: 'IELTS Writing Task 2 Band 8 Structure',
+    category: 'IELTS & Spoken',
+    content: 'Use a clear 4-paragraph essay structure.\nInclude two strong topic sentences per body paragraph.\nAvoid memorized clichés in Task 2.',
+    image: '/src/assets/images/hero_ielts_batch_1795411661577.jpg',
+    authorId: 'u-admin',
+    authorName: 'Alomgir',
+    authorRole: 'admin',
+    likes: 12,
+    likedByUserIds: [],
+    comments: [],
+    status: 'published',
+    createdAt: '2026-04-01T00:00:00Z',
+  };
+  const branches: Branch[] = [
+    {
+      id: 'br-off',
+      name: 'Inactive Branch',
+      code: 'OFF',
+      city: 'Dhaka',
+      address: 'Road 1',
+      phone: '017',
+      managerName: 'A',
+      activeStudents: 10,
+      status: 'inactive',
+    },
+    {
+      id: 'br-on',
+      name: 'Mirpur Active',
+      code: 'MPR',
+      city: 'Dhaka',
+      address: 'Road 2',
+      phone: '018',
+      managerName: 'B',
+      activeStudents: 100,
+      status: 'active',
+    },
+  ];
+  const draft = buildCourseDraftFromPost(post, [], branches, { price: 2490, status: 'active' });
+  assert.equal(draft.sourcePostId, 'post-44');
+  assert.equal(draft.category, 'IELTS & Spoken');
+  assert.equal(draft.price, 2490);
+  assert.equal(draft.status, 'active');
+  assert.deepEqual(draft.branchIds, ['br-on']);
+  assert.ok(draft.highlights.length >= 2);
+});
+
 
 
 

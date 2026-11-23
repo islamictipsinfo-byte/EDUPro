@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
@@ -38,7 +39,13 @@ import type {
   UserRole,
   WebhookConfig,
 } from '../types';
-import { DEFAULT_HEADER_MENU, normalizeHeaderMenu } from '../lib/domain';
+import {
+  DEFAULT_DASHBOARD_CONFIG,
+  DEFAULT_HEADER_MENU,
+  normalizeDashboardConfig,
+  normalizeHeaderMenu,
+} from '../lib/domain';
+import { enrichAuditLogEntry } from '../lib/auditLogs';
 import { createExtendedSeedCollections } from './seedExtensions';
 
 export interface StoredUser extends User {
@@ -860,6 +867,11 @@ function createInitialState(): DatabaseState {
       originalPrice: 0,
       author: 'Alomgir Hossain',
       pagesCount: 48,
+      pdfUrl: '',
+      fileSize: '2.4 MB',
+      salesCount: 38,
+      status: 'active',
+      coverImage: '/src/assets/images/course_english_books_1795411661325.jpg',
       summary: 'Complete suggestion covering Paragraph, Formal Letter, Email, CV, Composition, and 150 Board Grammar MCQs.',
       sampleContent: [
         'Chapter 1: High-Probability Paragraphs — Load Shedding, Tree Plantation, Smart Bangladesh, Climate Change, Metro Rail.',
@@ -876,6 +888,11 @@ function createInitialState(): DatabaseState {
       originalPrice: 150,
       author: 'Mahmudul Hasan',
       pagesCount: 72,
+      pdfUrl: '',
+      fileSize: '4.1 MB',
+      salesCount: 112,
+      status: 'active',
+      coverImage: '/src/assets/images/course_english_books_1795411661325.jpg',
       summary: 'অধ্যায়ভিত্তিক প্রতিটি টেক্সটের বাংলা অনুবাদ, গুরুত্বপূর্ণ Vocabulary, Flow Chart এবং Summary লেখার শর্টকাট ফর্মুলা।',
       sampleContent: [
         'Unit 1: People or Institutions Making History — Key Nelson Mandela & Bangabandhu speech vocabulary.',
@@ -892,6 +909,11 @@ function createInitialState(): DatabaseState {
       originalPrice: 0,
       author: 'Sabrina Karim',
       pagesCount: 36,
+      pdfUrl: '',
+      fileSize: '1.8 MB',
+      salesCount: 64,
+      status: 'active',
+      coverImage: '/src/assets/images/hero_spoken_grammar_1795411660470.jpg',
       summary: 'প্রাত্যহিক কথা বলার জন্য সবচেয়ে বেশি ব্যবহৃত ১০০টি ইংরেজি স্ট্রাকচার ও বাংলা অর্থসহ উদাহরণ।',
       sampleContent: [
         'Pattern 01: "It takes + time + to + verb" — It takes 20 minutes to reach Mirpur campus.',
@@ -908,6 +930,11 @@ function createInitialState(): DatabaseState {
       originalPrice: 150,
       author: 'Aloms English Center Academic Team',
       pagesCount: 64,
+      pdfUrl: '',
+      fileSize: '3.2 MB',
+      salesCount: 79,
+      status: 'active',
+      coverImage: '/src/assets/images/hero_hsc_english_1795411661478.jpg',
       summary: 'Voice, Narration, Tag Questions, Connectors, এবং Punctuation-এর কমপ্লিট পকেট রিভিশন গাইড।',
       sampleContent: [
         'Tag Question Exceptions: Let us -> shall we?, Let me/him -> will you?, Everybody/Nobody -> plural pronoun "they".',
@@ -1135,6 +1162,7 @@ function createInitialState(): DatabaseState {
       },
     ],
     homepageConfig,
+    dashboardConfig: normalizeDashboardConfig(DEFAULT_DASHBOARD_CONFIG),
   };
 
   const normalizedReviews = reviews.map((r) => ({
@@ -1320,6 +1348,10 @@ export function getDb(): DatabaseState {
       parsed.settings.headerMenu = normalizeHeaderMenu(parsed.settings.headerMenu, fallback.settings.headerMenu);
       parsed.settings.socialLinks = parsed.settings.socialLinks ?? fallback.settings.socialLinks;
       parsed.settings.customPages = parsed.settings.customPages ?? fallback.settings.customPages;
+      parsed.settings.dashboardConfig = normalizeDashboardConfig(
+        parsed.settings.dashboardConfig,
+        DEFAULT_DASHBOARD_CONFIG
+      );
       parsed.settings.heroSlides = (parsed.settings.heroSlides ?? []).map((s) => ({
         ...s,
         active: s.active !== false,
@@ -1327,6 +1359,13 @@ export function getDb(): DatabaseState {
       parsed.lessons = (parsed.lessons ?? []).map((l) => ({
         ...l,
         lessonType: l.lessonType ?? 'recorded',
+      }));
+      parsed.ebooks = (parsed.ebooks ?? []).map((eb) => ({
+        ...eb,
+        status: eb.status ?? 'active',
+        salesCount: eb.salesCount ?? 0,
+        fileSize: eb.fileSize ?? '2.4 MB',
+        pdfUrl: eb.pdfUrl ?? '',
       }));
       parsed.reviews = (parsed.reviews ?? []).map((r) => ({
         ...r,
@@ -1346,7 +1385,7 @@ export function getDb(): DatabaseState {
       parsed.transactions = parsed.transactions ?? fallback.transactions;
       parsed.backups = parsed.backups ?? [];
       parsed.recycleBin = parsed.recycleBin ?? [];
-      parsed.auditLogs = parsed.auditLogs ?? fallback.auditLogs;
+      parsed.auditLogs = (parsed.auditLogs ?? fallback.auditLogs).map(enrichAuditLogEntry);
       parsed.campaigns = parsed.campaigns ?? fallback.campaigns;
       parsed.plugins = parsed.plugins ?? fallback.plugins;
       parsed.webhooks = parsed.webhooks ?? fallback.webhooks;
@@ -1373,14 +1412,25 @@ export function resetDbToDefaults(): DatabaseState {
   return cachedState;
 }
 
+const auditEventBus = new EventEmitter();
+auditEventBus.setMaxListeners(100);
+
+export function subscribeAuditLogs(listener: (entry: AuditLogEntry) => void): () => void {
+  auditEventBus.on('audit_log', listener);
+  return () => {
+    auditEventBus.off('audit_log', listener);
+  };
+}
+
 export function recordAuditLog(
   db: DatabaseState,
   actor: { id: string; name: string; role: UserRole },
   action: string,
   target: string,
-  details: string
-): void {
-  db.auditLogs.unshift({
+  details: string,
+  explicitSeverity?: AuditLogEntry['severity']
+): AuditLogEntry {
+  const entry = enrichAuditLogEntry({
     id: `audit-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
     actorId: actor.id,
     actorName: actor.name,
@@ -1388,11 +1438,15 @@ export function recordAuditLog(
     action,
     target,
     details,
+    severity: explicitSeverity,
     createdAt: new Date().toISOString(),
   });
+  db.auditLogs.unshift(entry);
   if (db.auditLogs.length > 250) {
     db.auditLogs = db.auditLogs.slice(0, 250);
   }
+  auditEventBus.emit('audit_log', entry);
+  return entry;
 }
 
 export function createVerifiedBackupSnapshot(

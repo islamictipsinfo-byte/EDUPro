@@ -1,4 +1,6 @@
 import {
+  Activity,
+  ArrowLeft,
   ArrowDown,
   ArrowUp,
   Award,
@@ -17,6 +19,7 @@ import {
   FileText,
   Flame,
   GraduationCap,
+  Heart,
   Layers,
   LayoutDashboard,
   LayoutTemplate,
@@ -29,6 +32,7 @@ import {
   Radio,
   Search,
   Settings,
+  Shield,
   ShieldCheck,
   Tag,
   Trash2,
@@ -41,6 +45,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { AdminBatchModal } from '../components/AdminBatchModal';
 import { AdminCourseModal } from '../components/AdminCourseModal';
 import { AdminLessonModal } from '../components/AdminLessonModal';
+import { DashboardCustomizerModal } from '../components/dashboard/DashboardCustomizerModal';
+import { DashboardOverview } from '../components/dashboard/DashboardOverview';
+import {
+  DashboardSidebar,
+  type OverviewSubView,
+  type SidebarSubIntent,
+} from '../components/dashboard/DashboardSidebar';
+import { DashboardTopbar } from '../components/dashboard/DashboardTopbar';
+import { type QuickActionType } from '../components/dashboard/DashboardWidgets';
+import { EnrollmentsFeePanel } from '../components/dashboard/EnrollmentsFeePanel';
+import { SystemActivityLogsPanel } from '../components/dashboard/SystemActivityLogsPanel';
 import { HomepageCmsStudio } from '../components/HomepageCmsStudio';
 import { PaymentSystemPanel } from '../components/PaymentSystemPanel';
 import {
@@ -56,13 +71,16 @@ import {
   calculateDiscountedPrice,
   calculateStudentProgress,
   computeBatchSeatUsage,
+  DEFAULT_DASHBOARD_CONFIG,
   filterLessonsByTypeAndBatch,
   getAllowedPortalSections,
+  normalizeDashboardConfig,
   type PortalSection,
 } from '../lib/domain';
 import type {
   ApiPlugin,
   AttendanceRecord,
+  AuditLogEntry,
   Branch,
   BroadcastCampaign,
   CategoryItem,
@@ -71,6 +89,7 @@ import type {
   Course,
   CourseBatch,
   CourseLesson,
+  DashboardCustomizationConfig,
   Ebook,
   Enrollment,
   Exam,
@@ -138,6 +157,7 @@ interface PortalPayload {
   products?: Product[];
   ebooks?: Ebook[];
   rewards?: LearnerRewardProfile | null;
+  auditLogs?: AuditLogEntry[];
 }
 
 const SECTION_META: Record<PortalSection, { label: string; icon: typeof LayoutDashboard }> = {
@@ -154,28 +174,54 @@ const SECTION_META: Record<PortalSection, { label: string; icon: typeof LayoutDa
   users: { label: 'Users & Roles', icon: Users },
   orders: { label: 'Shop Orders', icon: Package },
   ai_ecosystem: { label: 'AI, SCORM & Security', icon: Bot },
+  activity_logs: { label: 'System Activity Logs', icon: Activity },
   guardian_monitor: { label: 'Child Progress', icon: GraduationCap },
   my_learning: { label: 'My Courses & Rewards', icon: BookOpen },
   settings: { label: 'Settings, Backups & Export', icon: Settings },
 };
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Super Admin',
+  admin: 'Admin',
   branch_manager: 'Branch Manager',
-  teacher: 'Instructor / Teacher',
+  teacher: 'Instructor',
   student: 'Student',
-  guardian: 'Guardian / Parent',
+  guardian: 'Guardian',
 };
 
+const QUICK_DEMO_ACCOUNTS: { role: string; email: string; desc: string }[] = [
+  { role: 'Admin', email: 'admin@alomsenglish.com', desc: 'Full LMS & CMS Console' },
+  { role: 'Branch Manager', email: 'manager@alomsenglish.com', desc: 'Campus & Fee Ops' },
+  { role: 'Teacher', email: 'teacher@alomsenglish.com', desc: 'Classes, Exams & Live' },
+  { role: 'Student', email: 'student@alomsenglish.com', desc: 'Courses, SCORM & XP' },
+  { role: 'Guardian', email: 'guardian@alomsenglish.com', desc: 'Child Progress Monitor' },
+];
+
 export function PortalPage({ navigate }: PortalPageProps) {
-  const { user, bootstrap, logout, apiFetch, refreshBootstrap } = useAuth();
+  const { user, bootstrap, login, logout, apiFetch, refreshBootstrap } = useAuth();
   const [data, setData] = useState<PortalPayload | null>(null);
   const [activeSection, setActiveSection] = useState<PortalSection>('overview');
+  const [activeSidebarIntent, setActiveSidebarIntent] = useState<SidebarSubIntent>(undefined);
+  const [overviewSubView, setOverviewSubView] = useState<OverviewSubView>('lms');
+  const [dashboardConfig, setDashboardConfig] = useState<DashboardCustomizationConfig>(
+    () => normalizeDashboardConfig(bootstrap?.settings?.dashboardConfig ?? DEFAULT_DASHBOARD_CONFIG)
+  );
+  const [customizerOpen, setCustomizerOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(
+    () => (bootstrap?.settings?.dashboardConfig?.themeMode ?? 'futuristic_light') === 'midnight_dark'
+  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [dashboardSearch, setDashboardSearch] = useState('');
+  const [dashLang, setDashLang] = useState<'en' | 'bn'>('en');
+  const [quickSigningEmail, setQuickSigningEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // Admin / Teacher: Advanced Course & Batch Studio state
   const [courseSubTab, setCourseSubTab] = useState<'courses' | 'batches'>('courses');
+  const [catalogInitialTab, setCatalogInitialTab] = useState<
+    'ebooks' | 'products' | 'instructors' | 'categories' | 'posts' | 'coupons'
+  >('ebooks');
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [courseSearch, setCourseSearch] = useState('');
@@ -247,6 +293,11 @@ export function PortalPage({ navigate }: PortalPageProps) {
         setSetPhone(res.settings.phone);
         setSetEmail(res.settings.email);
         setSetAddress(res.settings.address);
+        if (res.settings.dashboardConfig) {
+          const normalized = normalizeDashboardConfig(res.settings.dashboardConfig);
+          setDashboardConfig(normalized);
+          setDarkMode(normalized.themeMode === 'midnight_dark');
+        }
       }
     } finally {
       setLoading(false);
@@ -259,19 +310,66 @@ export function PortalPage({ navigate }: PortalPageProps) {
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-xl px-4 py-20 text-center">
-        <div className="rounded-2xl border border-slate-200 bg-white p-10 shadow-sm">
-          <h1 className="text-2xl font-extrabold text-slate-900">Sign In Required</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Please sign in to access the Unified Aloms English Center Portal.
+      <div className="dark flex min-h-screen items-center justify-center bg-[#19212B] px-4 py-12 text-slate-100">
+        <div className="w-full max-w-lg rounded-2xl border border-[#2F3B4D] bg-[#232D3B] p-8 shadow-2xl">
+          <div className="flex items-center justify-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#F59E0B] to-[#1FA894] text-white">
+              <GraduationCap className="h-5 w-5" />
+            </span>
+            <span className="text-xl font-extrabold tracking-tight text-white">
+              EduDash · Aloms EDUPro
+            </span>
+          </div>
+          <h1 className="mt-5 text-center text-2xl font-extrabold text-white">
+            Sign In to LMS Dashboard
+          </h1>
+          <p className="mt-1.5 text-center text-xs text-slate-400">
+            Launch instantly with a role demo account or sign in with your credentials.
           </p>
-          <button
-            type="button"
-            onClick={() => navigate('/login')}
-            className="mt-6 rounded-xl bg-[#062436] px-6 py-3 text-sm font-bold text-white"
-          >
-            Go to Login
-          </button>
+
+          <div className="mt-6 space-y-2">
+            {QUICK_DEMO_ACCOUNTS.map((acc) => (
+              <button
+                key={acc.email}
+                type="button"
+                disabled={quickSigningEmail !== null}
+                onClick={async () => {
+                  setQuickSigningEmail(acc.email);
+                  await login(acc.email, 'Aloms@2026');
+                  setQuickSigningEmail(null);
+                }}
+                className="flex w-full items-center justify-between rounded-xl border border-[#2F3B4D] bg-[#1E2632] px-4 py-3 text-left transition-colors hover:border-[#1FA894] disabled:opacity-60"
+              >
+                <div>
+                  <p className="text-xs font-bold text-white">
+                    {quickSigningEmail === acc.email ? `Signing in as ${acc.role}...` : `Enter as ${acc.role}`}
+                  </p>
+                  <p className="text-[11px] text-slate-400">{acc.desc}</p>
+                </div>
+                <span className="rounded-lg bg-[#1FA894] px-3 py-1 text-[11px] font-bold text-white">
+                  Launch
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-6 flex items-center justify-between gap-3 border-t border-[#2F3B4D] pt-5">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="rounded-xl border border-[#344155] px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-[#2C3748]"
+            >
+              Back to Website
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white px-5 py-2.5 text-xs font-bold text-slate-900 hover:bg-slate-200"
+            >
+              <Shield className="h-3.5 w-3.5 text-[#1FA894]" />
+              <span>Full Login Page</span>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -406,18 +504,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
     notify('MCQ Exam created and live.');
   };
 
-  const handleEnrollmentDecision = async (
-    id: string,
-    status: 'approved' | 'rejected'
-  ) => {
-    await apiFetch(`/api/portal/enrollments/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    });
-    await Promise.all([loadPortal(), refreshBootstrap()]);
-    notify(`Enrollment ${status}.`);
-  };
-
   const handleOrderStatus = async (id: string, status: Order['status']) => {
     await apiFetch(`/api/portal/orders/${id}`, {
       method: 'PATCH',
@@ -546,154 +632,247 @@ export function PortalPage({ navigate }: PortalPageProps) {
     notify('Center settings saved.');
   };
 
+  const pendingApprovalsCount = (data?.enrollments ?? []).filter((e) => e.status === 'pending').length;
+  const liveClassesCount = (data?.lessons ?? []).filter((l) => l.liveStatus === 'live_now').length;
+  const portalNotifications = [
+    ...(pendingApprovalsCount > 0
+      ? [
+          {
+            id: 'notif-pending-enr',
+            title: `${pendingApprovalsCount} Pending Enrollment(s)`,
+            subtitle: 'Review and approve student payment requests',
+            section: 'enrollments' as PortalSection,
+          },
+        ]
+      : []),
+    ...(liveClassesCount > 0
+      ? [
+          {
+            id: 'notif-live-classes',
+            title: `${liveClassesCount} Live Class(es) Active`,
+            subtitle: 'Monitor or launch live video classroom sessions',
+            section: 'lessons' as PortalSection,
+          },
+        ]
+      : []),
+    {
+      id: 'notif-lms-ready',
+      title: 'LMS Analytics Synchronized',
+      subtitle: 'All branch metrics and recent enrollments are up to date',
+      section: 'overview' as PortalSection,
+    },
+  ];
+
+  const handleSelectOverviewSubView = (subView: OverviewSubView) => {
+    setOverviewSubView(subView);
+    setActiveSection('overview');
+  };
+
+  const handleSectionRoute = (sec: PortalSection, intent?: SidebarSubIntent) => {
+    setActiveSection(sec);
+    setActiveSidebarIntent(intent);
+    if (sec === 'courses' && (intent === 'courses' || intent === 'batches')) {
+      setCourseSubTab(intent);
+    }
+    if (
+      sec === 'catalog_cms' &&
+      (intent === 'ebooks' ||
+        intent === 'products' ||
+        intent === 'posts' ||
+        intent === 'categories' ||
+        intent === 'coupons')
+    ) {
+      setCatalogInitialTab(intent);
+    }
+  };
+
+  const handleQuickAction = (action: QuickActionType) => {
+    switch (action) {
+      case 'add_student':
+        setURole('student');
+        handleSectionRoute('users');
+        break;
+      case 'add_teacher':
+        setURole('teacher');
+        handleSectionRoute('users');
+        break;
+      case 'create_batch':
+        setEditingBatch(null);
+        setBatchModalOpen(true);
+        break;
+      case 'add_course':
+        setEditingCourse(null);
+        setCourseModalOpen(true);
+        break;
+      case 'add_post':
+        handleSectionRoute('catalog_cms', 'posts');
+        break;
+      case 'create_category':
+        handleSectionRoute('catalog_cms', 'categories');
+        break;
+      case 'course_from_post':
+        handleSectionRoute('catalog_cms', 'posts');
+        break;
+      case 'add_ebook':
+        handleSectionRoute('catalog_cms', 'ebooks');
+        break;
+      case 'add_product':
+        handleSectionRoute('catalog_cms', 'products');
+        break;
+      case 'take_exam':
+        handleSectionRoute('exams');
+        break;
+      case 'customize':
+        setCustomizerOpen(true);
+        break;
+    }
+  };
+
+  const handleSaveDashboardConfig = async (nextConfig: DashboardCustomizationConfig) => {
+    await apiFetch('/api/portal/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ dashboardConfig: nextConfig }),
+    });
+    setDashboardConfig(nextConfig);
+    setDarkMode(nextConfig.themeMode === 'midnight_dark');
+    await Promise.all([loadPortal(), refreshBootstrap()]);
+    notify('Custom Admin Dashboard layout saved!');
+  };
+
   return (
-    <div className="min-h-screen bg-slate-100">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:flex-row lg:px-8">
-        {/* Unified Single Sidebar */}
-        <aside className="w-full shrink-0 lg:w-64">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#062436] text-xs font-extrabold text-amber-400">
-                {user.name.slice(0, 2).toUpperCase()}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-extrabold text-slate-900">{user.name}</p>
-                <p className="inline-flex items-center gap-1 text-xs font-bold text-sky-700">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  <span>{ROLE_LABELS[user.role]}</span>
-                </p>
+    <div className={darkMode ? 'dark' : ''}>
+      <div
+        style={
+          darkMode
+            ? { backgroundColor: dashboardConfig.colors.workspaceDarkBg }
+            : {
+                backgroundImage: `linear-gradient(to bottom right, ${dashboardConfig.colors.workspaceLightBg}, ${dashboardConfig.colors.workspaceLightBgEnd}, ${dashboardConfig.colors.workspaceLightBg})`,
+              }
+        }
+        className={`flex min-h-screen transition-colors ${
+          darkMode ? 'text-slate-100' : 'text-slate-900'
+        }`}
+      >
+        {/* Left Navigation Sidebar */}
+        <DashboardSidebar
+          user={user}
+          brandName={bootstrap?.settings.brandName || "Alom's English Center"}
+          roleLabel={ROLE_LABELS[user.role]}
+          allowedSections={allowedSections}
+          currentSection={currentSection}
+          activeSubIntent={activeSidebarIntent}
+          overviewSubView={overviewSubView}
+          accentPreset={dashboardConfig.accentPreset}
+          dashboardConfig={dashboardConfig}
+          collapsed={sidebarCollapsed}
+          mobileOpen={mobileMenuOpen}
+          lang={dashLang}
+          unreadMessagesCount={pendingApprovalsCount}
+          onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+          onCloseMobile={() => setMobileMenuOpen(false)}
+          onSelectSection={handleSectionRoute}
+          onSelectOverviewSubView={handleSelectOverviewSubView}
+          onNavigatePublic={(path) => navigate(path)}
+          onLogout={() => {
+            logout();
+            navigate('/');
+          }}
+        />
+
+        {/* Right Main Column: Topbar + Workspace + Footer */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <DashboardTopbar
+            user={user}
+            roleLabel={ROLE_LABELS[user.role]}
+            searchQuery={dashboardSearch}
+            onSearchChange={setDashboardSearch}
+            darkMode={darkMode}
+            onToggleDarkMode={() => setDarkMode((v) => !v)}
+            lang={dashLang}
+            onToggleLang={() => setDashLang((l) => (l === 'en' ? 'bn' : 'en'))}
+            canCustomize={user.role === 'admin'}
+            dashboardConfig={dashboardConfig}
+            onOpenCustomizer={() => setCustomizerOpen(true)}
+            unreadMessagesCount={pendingApprovalsCount}
+            notifications={portalNotifications}
+            onOpenMobileMenu={() => setMobileMenuOpen(true)}
+            onSelectSection={(sec) => handleSectionRoute(sec)}
+          />
+
+          <section
+            aria-label="Portal Workspace"
+            className="min-w-0 flex-1 space-y-6 px-4 py-5 sm:px-6"
+          >
+            {feedback && (
+              <div className="flex items-center gap-2 rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-xs font-bold text-emerald-800 dark:text-emerald-200">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{feedback}</span>
               </div>
-            </div>
+            )}
 
-            <nav className="mt-4 space-y-1" aria-label="Portal Navigation">
-              {allowedSections.map((sec) => {
-                const meta = SECTION_META[sec];
-                const Icon = meta.icon;
-                const active = currentSection === sec;
-                return (
-                  <button
-                    key={sec}
-                    type="button"
-                    onClick={() => setActiveSection(sec)}
-                    className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-xs font-bold transition-colors ${
-                      active
-                        ? 'bg-[#062436] text-white'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{meta.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            <button
-              type="button"
-              onClick={() => {
-                logout();
-                navigate('/');
-              }}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Sign Out</span>
-            </button>
-          </div>
-        </aside>
-
-        {/* Main Workspace */}
-        <section aria-label="Portal Workspace" className="min-w-0 flex-1 space-y-6">
-          {feedback && (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
-              <CheckCircle2 className="h-4 w-4" />
-              <span>{feedback}</span>
-            </div>
-          )}
-
-          {loading && !data ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
-              Loading portal workspace...
-            </div>
-          ) : (
-            <>
-              {/* OVERVIEW */}
-              {currentSection === 'overview' && data && (
-                <div className="space-y-6">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-sky-600">
-                          Unified Portal · {ROLE_LABELS[user.role]}
-                        </span>
-                        <h1 className="mt-1 text-2xl font-extrabold text-slate-900">
-                          Welcome back, {user.name}
-                        </h1>
-                        {data.branch && (
-                          <p className="mt-1 text-xs font-semibold text-emerald-700">
-                            Assigned Campus: {data.branch.name} ({data.branch.code})
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => navigate('/learn')}
-                          className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100"
-                        >
-                          Open Classroom
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => navigate('/exams')}
-                          className="rounded-xl bg-[#062436] px-4 py-2 text-xs font-bold text-white hover:bg-[#0b3854]"
-                        >
-                          Live Exams
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                      {Object.entries(data.metrics).map(([key, val]) => (
-                        <div
-                          key={key}
-                          className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                        >
-                          <p className="text-xs font-semibold capitalize text-slate-500">
-                            {key.replace(/([A-Z])/g, ' $1')}
-                          </p>
-                          <p className="font-mono-tabular mt-1 text-2xl font-extrabold text-slate-900">
-                            {key.toLowerCase().includes('revenue')
-                              ? `৳${val.toLocaleString()}`
-                              : val.toLocaleString()}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {user.role === 'admin' && (
-                    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                      <div>
-                        <h2 className="text-base font-extrabold text-slate-900">
-                          Laravel 11 Ready-to-Install System Package
-                        </h2>
-                        <p className="mt-0.5 text-xs text-slate-700">
-                          Clean Laravel 11 MVC source with Web Installer (/install), RBAC for all 5
-                          roles, and AEC branding (zero external workspace folders).
-                        </p>
-                      </div>
-                      <a
-                        href="/downloads/aloms-english-center-laravel.zip"
-                        className="inline-flex items-center gap-2 rounded-xl bg-[#062436] px-4 py-2.5 text-xs font-bold text-white hover:bg-indigo-600"
-                      >
-                        <Download className="h-4 w-4 text-amber-400" />
-                        <span>Download Laravel 11 ZIP</span>
-                      </a>
-                    </div>
-                  )}
+            {currentSection !== 'overview' && (
+              <div
+                className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-3.5 shadow-xs ${
+                  darkMode
+                    ? 'border-[#1E2E52] bg-[#0F1B3B] text-white'
+                    : 'border-white/80 bg-white/90 text-slate-900 backdrop-blur-md'
+                }`}
+              >
+                <div>
+                  <h1 className="text-base font-extrabold">{SECTION_META[currentSection].label}</h1>
+                  <p className="text-xs opacity-70">
+                    {ROLE_LABELS[user.role]} Workspace · {bootstrap?.settings.brandName || "Alom's English Center"}
+                  </p>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSectionRoute('overview');
+                    setOverviewSubView('lms');
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#6366F1] px-4 py-2 text-xs font-bold text-white shadow-xs hover:opacity-95"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Back to LMS Dashboard</span>
+                </button>
+              </div>
+            )}
+
+            {loading && !data ? (
+              <div className="rounded-2xl border border-white/60 bg-white/85 p-12 text-center text-sm text-slate-600">
+                Loading LMS dashboard workspace...
+              </div>
+            ) : (
+              <>
+                {/* OVERVIEW (Futuristic Alom's English Center LMS Dashboard) */}
+                {currentSection === 'overview' && data && (
+                  <DashboardOverview
+                    data={{
+                      ...data,
+                      instructors: data.instructors ?? bootstrap?.instructors ?? [],
+                      reviews: data.reviews ?? bootstrap?.reviews ?? [],
+                      posts: data.posts ?? [],
+                    }}
+                    auditLogs={data.auditLogs}
+                    searchQuery={dashboardSearch}
+                    overviewSubView={overviewSubView}
+                    lang={dashLang}
+                    darkMode={darkMode}
+                    canCustomize={user.role === 'admin'}
+                    dashboardConfig={dashboardConfig}
+                    onSelectSection={handleSectionRoute}
+                    onQuickAction={handleQuickAction}
+                    onNavigate={navigate}
+                  />
+                )}
+
+                {/* ADMIN REAL-TIME SYSTEM ACTIVITY LOGS CONSOLE */}
+                {currentSection === 'activity_logs' && user.role === 'admin' && data && (
+                  <SystemActivityLogsPanel
+                    initialLogs={data.auditLogs}
+                    darkMode={darkMode}
+                  />
+                )}
 
               {/* COURSES & BATCHES MANAGEMENT (Advanced Studio) */}
               {currentSection === 'courses' && data && (() => {
@@ -1637,6 +1816,9 @@ export function PortalPage({ navigate }: PortalPageProps) {
                   posts={data.posts ?? []}
                   coupons={data.coupons ?? []}
                   branches={data.branches ?? bootstrap?.branches ?? []}
+                  transactions={data.transactions ?? []}
+                  initialSubTab={catalogInitialTab}
+                  onOpenCoursesSection={() => handleSectionRoute('courses', 'courses')}
                   onRefresh={async () => {
                     await Promise.all([loadPortal(), refreshBootstrap()]);
                   }}
@@ -1678,79 +1860,20 @@ export function PortalPage({ navigate }: PortalPageProps) {
 
               {/* ENROLLMENTS & FEES */}
               {currentSection === 'enrollments' && data && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                  <h2 className="text-lg font-extrabold text-slate-900">
-                    Enrollments & Fee Approvals ({data.enrollments?.length ?? 0})
-                  </h2>
-                  <div className="mt-4 overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-xs font-bold uppercase text-slate-500">
-                          <th className="py-2.5 pr-4">Student</th>
-                          <th className="py-2.5 pr-4">Course</th>
-                          <th className="py-2.5 pr-4">Method</th>
-                          <th className="py-2.5 pr-4">Amount</th>
-                          <th className="py-2.5 pr-4">Status</th>
-                          {(user.role === 'admin' || user.role === 'branch_manager') && (
-                            <th className="py-2.5">Actions</th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {(data.enrollments ?? []).map((enr) => (
-                          <tr key={enr.id}>
-                            <td className="py-3 pr-4">
-                              <p className="font-bold text-slate-900">{enr.studentName}</p>
-                              <p className="text-xs text-slate-500">{enr.studentEmail}</p>
-                            </td>
-                            <td className="py-3 pr-4 text-xs font-semibold text-slate-700">
-                              {enr.courseTitle}
-                            </td>
-                            <td className="py-3 pr-4 text-xs">{enr.paymentMethod}</td>
-                            <td className="font-mono-tabular py-3 pr-4 font-bold">
-                              ৳{enr.amountPaid}
-                            </td>
-                            <td className="py-3 pr-4">
-                              <span
-                                className={`text-xs font-bold uppercase ${
-                                  enr.status === 'approved'
-                                    ? 'text-emerald-700'
-                                    : enr.status === 'pending'
-                                      ? 'text-amber-700'
-                                      : 'text-rose-700'
-                                }`}
-                              >
-                                {enr.status}
-                              </span>
-                            </td>
-                            {(user.role === 'admin' || user.role === 'branch_manager') && (
-                              <td className="py-3">
-                                {enr.status === 'pending' && (
-                                  <div className="flex gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleEnrollmentDecision(enr.id, 'approved')}
-                                      className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white"
-                                    >
-                                      Approve
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleEnrollmentDecision(enr.id, 'rejected')}
-                                      className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-bold text-white"
-                                    >
-                                      Reject
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <EnrollmentsFeePanel
+                  role={user.role}
+                  userBranchId={user.branchId}
+                  enrollments={data.enrollments ?? []}
+                  courses={data.courses ?? bootstrap?.courses ?? []}
+                  branches={data.branches ?? bootstrap?.branches ?? []}
+                  users={data.users ?? []}
+                  paymentGateways={data.paymentGateways ?? []}
+                  darkMode={darkMode}
+                  onRefresh={async () => {
+                    await Promise.all([loadPortal(), refreshBootstrap()]);
+                  }}
+                  onNotify={notify}
+                />
               )}
 
               {/* DEDICATED PAYMENT SYSTEM & GATEWAYS */}
@@ -2523,8 +2646,33 @@ export function PortalPage({ navigate }: PortalPageProps) {
               )}
             </>
           )}
-        </section>
+          </section>
+
+          {/* Centered Dashboard Footer */}
+          <footer
+            className={`mt-auto border-t py-3.5 text-center text-xs ${
+              darkMode
+                ? 'border-[#1E2E52] bg-[#0B142C] text-slate-400'
+                : 'border-white/70 bg-white/70 text-slate-600 backdrop-blur-md'
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <span>© 2026</span>
+              <Heart className="h-3.5 w-3.5 fill-rose-500 text-rose-500" />
+              <span>{bootstrap?.settings.brandName || "Alom's English Center"} · LMS v3.0</span>
+            </span>
+          </footer>
+        </div>
       </div>
+
+      {user.role === 'admin' && (
+        <DashboardCustomizerModal
+          open={customizerOpen}
+          config={dashboardConfig}
+          onClose={() => setCustomizerOpen(false)}
+          onSave={handleSaveDashboardConfig}
+        />
+      )}
 
       {user.role === 'admin' && data && (
         <AdminCourseModal

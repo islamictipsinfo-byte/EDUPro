@@ -11,9 +11,11 @@ import {
   filterActivePaymentGateways,
   gradeExamSubmission,
   maskLeaderboardName,
+  normalizeDashboardConfig,
   parseImageUploadDataUrl,
   sanitizeSafeUrl,
 } from './src/lib/domain';
+import { maskEmailForAudit } from './src/lib/auditLogs';
 import { createAiRouter } from './src/server/aiRoutes';
 import { createPlatformRouter } from './src/server/platformRoutes';
 import {
@@ -31,12 +33,14 @@ import type {
   Course,
   CourseBatch,
   CourseLesson,
+  Enrollment,
   Exam,
   ExamQuestion,
   HeroSlide,
   HomepageConfig,
   LessonType,
   LiveClassStatus,
+  PaymentGatewayType,
   Review,
   UserRole,
 } from './src/types';
@@ -218,7 +222,7 @@ async function startServer() {
       batches: db.batches,
       instructors: db.instructors,
       products: db.products,
-      ebooks: db.ebooks,
+      ebooks: db.ebooks.filter((e) => e.status !== 'draft'),
       reviews: visibleReviews,
       categories: db.categories.filter((c) => c.active),
       leaderboardSummary,
@@ -245,22 +249,42 @@ async function startServer() {
         lectureSheetUrl: l.isFreePreview ? l.lectureSheetUrl : '',
         sheetSummary: l.isFreePreview ? l.sheetSummary : 'Available after enrollment',
       }));
-    const branches = db.branches.filter((b) => course.branchIds.includes(b.id));
+    const branches = db.branches.filter(
+      (b) => course.branchIds.includes(b.id) && b.status === 'active'
+    );
     res.json({ course, instructors, batches, lessons, branches });
   });
 
   app.post('/api/public/coupons/validate', (req, res) => {
     const code = String(req.body?.code ?? '').trim().toUpperCase();
     const courseId = String(req.body?.courseId ?? '').trim();
+    const ebookId = String(req.body?.ebookId ?? '').trim();
     const db = getDb();
-    const course = db.courses.find((c) => c.id === courseId);
-    if (!course) {
-      res.status(404).json({ error: 'Course not found' });
-      return;
-    }
+
     const coupon = db.coupons.find((c) => c.code.toUpperCase() === code && c.active);
     if (!coupon) {
       res.status(400).json({ error: 'Invalid or expired coupon code' });
+      return;
+    }
+
+    if (ebookId) {
+      const ebook = db.ebooks.find((e) => e.id === ebookId);
+      if (!ebook) {
+        res.status(404).json({ error: 'E-Book not found' });
+        return;
+      }
+      const pricing = calculateDiscountedPrice(
+        ebook.isFree ? 0 : ebook.price,
+        ebook.originalPrice || ebook.price,
+        coupon
+      );
+      res.json({ coupon, pricing });
+      return;
+    }
+
+    const course = db.courses.find((c) => c.id === courseId);
+    if (!course) {
+      res.status(404).json({ error: 'Course not found' });
       return;
     }
     const pricing = calculateDiscountedPrice(course.price, course.originalPrice, coupon);
@@ -358,6 +382,13 @@ async function startServer() {
     };
 
     db.users.push(newUser);
+    recordAuditLog(
+      db,
+      newUser,
+      'USER_REGISTER',
+      maskEmailForAudit(newUser.email),
+      `Registered new ${role} account (${branchId})`
+    );
     saveDb(db);
     const token = signToken(newUser);
     res.status(201).json({ token, user: sanitizeUser(newUser) });
@@ -373,9 +404,30 @@ async function startServer() {
     const db = getDb();
     const user = db.users.find((u) => u.email.toLowerCase() === email);
     if (!user || !verifyPassword(password, user.passwordHash)) {
+      recordAuditLog(
+        db,
+        {
+          id: user?.id ?? 'anonymous',
+          name: user?.name ?? 'Unknown Visitor',
+          role: user?.role ?? 'student',
+        },
+        'USER_LOGIN_FAILED',
+        maskEmailForAudit(email),
+        'Failed authentication attempt',
+        'critical'
+      );
+      saveDb(db);
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
+    recordAuditLog(
+      db,
+      user,
+      'USER_LOGIN',
+      maskEmailForAudit(user.email),
+      `Signed in to ${user.role} workspace`
+    );
+    saveDb(db);
     const token = signToken(user);
     res.json({ token, user: sanitizeUser(user) });
   });
@@ -423,6 +475,17 @@ async function startServer() {
       return;
     }
 
+    const activeBranchFallback = db.branches.find((b) => b.status === 'active')?.id ?? '';
+    const requestedBranchId = String(req.body?.branchId ?? '').trim() || activeBranchFallback;
+    const matchedBranch = requestedBranchId
+      ? db.branches.find((b) => b.id === requestedBranchId)
+      : undefined;
+    if (matchedBranch && matchedBranch.status !== 'active') {
+      res.status(400).json({ error: `Branch "${matchedBranch.name}" is currently inactive.` });
+      return;
+    }
+    const resolvedBranchId = matchedBranch?.id ?? activeBranchFallback ?? 'online';
+
     const existing = db.enrollments.find(
       (e) => e.userId === user.id && e.courseId === course.id && e.status !== 'rejected'
     );
@@ -444,7 +507,7 @@ async function startServer() {
       studentEmail: user.email,
       courseId: course.id,
       courseTitle: course.title,
-      branchId,
+      branchId: resolvedBranchId,
       paymentMethod,
       amountPaid: pricing.finalPrice,
       couponUsed: pricing.appliedCouponCode ?? undefined,
@@ -457,6 +520,13 @@ async function startServer() {
     if (status === 'approved') {
       course.enrolledCount += 1;
     }
+    recordAuditLog(
+      db,
+      user,
+      'ENROLLMENT_CREATE',
+      course.title,
+      `${paymentMethod} · ৳${pricing.finalPrice} (${status})`
+    );
     saveDb(db);
     res.status(201).json({ enrollment });
   });
@@ -601,6 +671,13 @@ async function startServer() {
     }
 
     const db = getDb();
+    if (branchPickupId) {
+      const pickupBranch = db.branches.find((b) => b.id === branchPickupId);
+      if (!pickupBranch || pickupBranch.status !== 'active') {
+        res.status(400).json({ error: 'Selected pickup branch is unavailable or inactive.' });
+        return;
+      }
+    }
     const resolvedItems: { productId: string; title: string; quantity: number; unitPrice: number }[] = [];
     for (const raw of itemsInput) {
       const prod = db.products.find((p) => p.id === raw.productId);
@@ -641,6 +718,13 @@ async function startServer() {
       createdAt: new Date().toISOString(),
     };
     db.orders.unshift(order);
+    recordAuditLog(
+      db,
+      user,
+      'ORDER_STATUS',
+      order.id,
+      `Order created · ৳${totals.totalAmount} (${resolvedItems.length} item(s))`
+    );
     saveDb(db);
     res.status(201).json({ order });
   });
@@ -649,12 +733,16 @@ async function startServer() {
     const user = req.authUser!;
     const ebookId = String(req.body?.ebookId ?? '').trim();
     const db = getDb();
-    const ebook = db.ebooks.find((e) => e.id === ebookId);
+    const ebook = db.ebooks.find((e) => e.id === ebookId && e.status !== 'draft');
     if (!ebook) {
       res.status(404).json({ error: 'E-Book not found' });
       return;
     }
     const existing = db.claimedEbooksByUser[user.id] ?? [];
+    if (!existing.includes(ebook.id) && !ebook.isFree && ebook.price > 0) {
+      res.status(400).json({ error: 'Paid e-books must be purchased via payment checkout first.' });
+      return;
+    }
     if (!existing.includes(ebook.id)) {
       existing.push(ebook.id);
       db.claimedEbooksByUser[user.id] = existing;
@@ -688,6 +776,7 @@ async function startServer() {
         batches: db.batches,
         lessons: db.lessons,
         exams: db.exams,
+        examAttempts: db.examAttempts,
         branches: db.branches,
         users: db.users.map(sanitizeUser),
         enrollments: db.enrollments,
@@ -712,6 +801,7 @@ async function startServer() {
         instructors: db.instructors,
         products: db.products,
         ebooks: db.ebooks,
+        auditLogs: db.auditLogs.slice(0, 120),
       });
     }
 
@@ -966,6 +1056,13 @@ async function startServer() {
     };
 
     db.courses.unshift(course);
+    recordAuditLog(
+      db,
+      req.authUser!,
+      'COURSE_CREATE',
+      course.title,
+      `${course.category} · ৳${course.price} (${course.status})`
+    );
     saveDb(db);
     res.status(201).json({ course });
   });
@@ -996,6 +1093,13 @@ async function startServer() {
         enr.courseTitle = updated.title;
       }
     }
+    recordAuditLog(
+      db,
+      req.authUser!,
+      'COURSE_UPDATE',
+      updated.title,
+      `${updated.category} · ৳${updated.price} (${updated.status})`
+    );
     saveDb(db);
     res.json({ course: updated });
   });
@@ -1017,7 +1121,15 @@ async function startServer() {
         res.status(400).json({ error: 'Status must be active or draft' });
         return;
       }
+      const prevStatus = course.status;
       course.status = nextStatus;
+      recordAuditLog(
+        db,
+        req.authUser!,
+        'COURSE_STATUS',
+        course.title,
+        `Status changed ${prevStatus} -> ${nextStatus}`
+      );
       saveDb(db);
       res.json({ course });
     }
@@ -1055,6 +1167,13 @@ async function startServer() {
         });
       });
 
+      recordAuditLog(
+        db,
+        req.authUser!,
+        'COURSE_DUPLICATE',
+        clone.title,
+        `Duplicated from "${source.title}" (${sourceLessons.length} lessons)`
+      );
       saveDb(db);
       res.status(201).json({ course: clone });
     }
@@ -1159,6 +1278,7 @@ async function startServer() {
         ...parsed,
       };
       db.batches.unshift(batch);
+      recordAuditLog(db, actor, 'BATCH_CREATE', batch.name, `${batch.code} · ${batch.mode}`);
       saveDb(db);
       res.status(201).json({ batch });
     }
@@ -1193,6 +1313,7 @@ async function startServer() {
           l.batchName = updated.name;
         }
       }
+      recordAuditLog(db, actor, 'BATCH_UPDATE', updated.name, `${updated.code} · ${updated.status}`);
       saveDb(db);
       res.json({ batch: updated });
     }
@@ -1219,7 +1340,9 @@ async function startServer() {
         res.status(400).json({ error: 'Status must be open, running, or closed' });
         return;
       }
+      const prevStatus = batch.status;
       batch.status = nextStatus;
+      recordAuditLog(db, actor, 'BATCH_STATUS', batch.name, `${prevStatus} -> ${nextStatus}`);
       saveDb(db);
       res.json({ batch });
     }
@@ -1687,7 +1810,207 @@ async function startServer() {
     res.json({ deletedId: removed.id, branches: db.branches });
   });
 
-  // Admin & Branch Manager: Approve/Reject Enrollment
+  // Admin & Branch Manager: Create, Update, Approve/Reject & Delete Enrollments
+  app.post(
+    '/api/portal/enrollments',
+    requireAuth,
+    requireRole(['admin', 'branch_manager']),
+    (req: AuthedRequest, res) => {
+      const user = req.authUser!;
+      const b = req.body ?? {};
+      const studentName = String(b.studentName ?? '').trim();
+      const studentEmail = String(b.studentEmail ?? '').trim().toLowerCase();
+      const courseId = String(b.courseId ?? '').trim();
+      const requestedBranchId = String(b.branchId ?? '').trim();
+      const paymentMethod = String(b.paymentMethod ?? 'Branch Cash').trim();
+      const amountPaid = Math.max(0, Number(b.amountPaid) || 0);
+      const trxId = String(b.trxId ?? '').trim();
+      const status = (
+        ['approved', 'pending', 'rejected'].includes(b.status) ? b.status : 'pending'
+      ) as 'approved' | 'pending' | 'rejected';
+
+      if (!studentName || !studentEmail || !courseId) {
+        res.status(400).json({ error: 'Student name, email, and course are required.' });
+        return;
+      }
+
+      const db = getDb();
+      const course = db.courses.find((c) => c.id === courseId);
+      if (!course) {
+        res.status(404).json({ error: 'Selected course was not found.' });
+        return;
+      }
+
+      const activeFallback = db.branches.find((br) => br.status === 'active')?.id ?? 'online';
+      const resolvedBranchId =
+        user.role === 'branch_manager' && user.branchId
+          ? user.branchId
+          : requestedBranchId || activeFallback;
+
+      if (user.role === 'admin' && resolvedBranchId !== 'online') {
+        const matchedBranch = db.branches.find((br) => br.id === resolvedBranchId);
+        if (matchedBranch && matchedBranch.status !== 'active') {
+          res.status(400).json({ error: `Branch "${matchedBranch.name}" is inactive.` });
+          return;
+        }
+      }
+
+      const matchedUser =
+        (b.userId ? db.users.find((u) => u.id === String(b.userId)) : undefined) ??
+        db.users.find((u) => u.email.toLowerCase() === studentEmail);
+      const userId = matchedUser?.id ?? `u-walkin-${Date.now()}`;
+      const invoiceNo = `INV-AEC-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      const enrollment: Enrollment = {
+        id: `enr-${Date.now()}`,
+        userId,
+        studentName,
+        studentEmail,
+        courseId: course.id,
+        courseTitle: course.title,
+        branchId: resolvedBranchId,
+        paymentMethod: paymentMethod as Enrollment['paymentMethod'],
+        trxId: trxId || (paymentMethod === 'Branch Cash' ? `CASH-${Date.now().toString().slice(-4)}` : undefined),
+        invoiceNo,
+        amountPaid,
+        status,
+        completedLessonIds: [],
+        enrolledAt: new Date().toISOString(),
+      };
+
+      db.enrollments.unshift(enrollment);
+      if (status === 'approved') {
+        course.enrolledCount += 1;
+      }
+
+      db.transactions.unshift({
+        id: `txn-${Date.now()}`,
+        invoiceNo,
+        referenceType: 'course',
+        referenceId: enrollment.id,
+        userId,
+        payerName: studentName,
+        gateway: paymentMethod as PaymentGatewayType,
+        walletOrLast4: studentEmail.slice(0, 14),
+        trxId: enrollment.trxId || invoiceNo,
+        subtotal: amountPaid,
+        discountAmount: 0,
+        deliveryFee: 0,
+        totalAmount: amountPaid,
+        status: status === 'approved' ? 'completed' : 'pending_verification',
+        createdAt: new Date().toISOString(),
+      });
+
+      if (status === 'approved' && amountPaid > 0) {
+        db.financialRecords.unshift({
+          id: `fin-${Date.now()}`,
+          type: 'income',
+          category: 'Course Tuition Fee',
+          title: `${course.title} (${paymentMethod}) — ${studentName}`,
+          amount: amountPaid,
+          branchId: resolvedBranchId,
+          date: new Date().toISOString().slice(0, 10),
+          recordedBy: user.name,
+        });
+      }
+
+      recordAuditLog(
+        db,
+        user,
+        'ENROLLMENT_CREATE',
+        course.title,
+        `${studentName} · ${paymentMethod} · ৳${amountPaid} (${status})`
+      );
+      saveDb(db);
+      res.status(201).json({ enrollment });
+    }
+  );
+
+  app.put(
+    '/api/portal/enrollments/:id',
+    requireAuth,
+    requireRole(['admin', 'branch_manager']),
+    (req: AuthedRequest, res) => {
+      const user = req.authUser!;
+      const db = getDb();
+      const enrollment = db.enrollments.find((e) => e.id === req.params.id);
+      if (!enrollment) {
+        res.status(404).json({ error: 'Enrollment not found.' });
+        return;
+      }
+      if (user.role === 'branch_manager' && user.branchId && enrollment.branchId !== user.branchId) {
+        res.status(403).json({ error: 'Branch managers can only manage enrollments for their own branch.' });
+        return;
+      }
+
+      const b = req.body ?? {};
+      const nextStatus = (
+        ['approved', 'pending', 'rejected'].includes(b.status) ? b.status : enrollment.status
+      ) as Enrollment['status'];
+      const nextCourseId = b.courseId ? String(b.courseId) : enrollment.courseId;
+      const nextCourse = db.courses.find((c) => c.id === nextCourseId);
+      if (!nextCourse) {
+        res.status(404).json({ error: 'Selected course not found.' });
+        return;
+      }
+
+      const prevCourseId = enrollment.courseId;
+      const prevStatus = enrollment.status;
+      if (prevStatus === 'approved' && (nextStatus !== 'approved' || prevCourseId !== nextCourseId)) {
+        const prevCourse = db.courses.find((c) => c.id === prevCourseId);
+        if (prevCourse) prevCourse.enrolledCount = Math.max(0, prevCourse.enrolledCount - 1);
+      }
+      if (nextStatus === 'approved' && (prevStatus !== 'approved' || prevCourseId !== nextCourseId)) {
+        nextCourse.enrolledCount += 1;
+      }
+
+      enrollment.studentName = String(b.studentName ?? enrollment.studentName).trim() || enrollment.studentName;
+      enrollment.studentEmail =
+        String(b.studentEmail ?? enrollment.studentEmail).trim().toLowerCase() || enrollment.studentEmail;
+      enrollment.courseId = nextCourse.id;
+      enrollment.courseTitle = nextCourse.title;
+      if (user.role === 'admin' && b.branchId) {
+        enrollment.branchId = String(b.branchId);
+      }
+      if (b.paymentMethod) {
+        enrollment.paymentMethod = String(b.paymentMethod).trim() as Enrollment['paymentMethod'];
+      }
+      if (b.amountPaid !== undefined) {
+        enrollment.amountPaid = Math.max(0, Number(b.amountPaid) || 0);
+      }
+      if (b.trxId !== undefined) {
+        enrollment.trxId = String(b.trxId).trim() || undefined;
+      }
+      enrollment.status = nextStatus;
+
+      const linkedTxn = db.transactions.find(
+        (t) => t.referenceType === 'course' && t.referenceId === enrollment.id
+      );
+      if (linkedTxn) {
+        linkedTxn.payerName = enrollment.studentName;
+        linkedTxn.gateway = enrollment.paymentMethod as PaymentGatewayType;
+        linkedTxn.totalAmount = enrollment.amountPaid;
+        if (enrollment.trxId) linkedTxn.trxId = enrollment.trxId;
+        linkedTxn.status =
+          nextStatus === 'approved'
+            ? 'completed'
+            : nextStatus === 'pending'
+              ? 'pending_verification'
+              : 'refunded';
+      }
+
+      recordAuditLog(
+        db,
+        user,
+        'ENROLLMENT_UPDATE',
+        enrollment.courseTitle,
+        `${enrollment.studentName} · ${enrollment.paymentMethod} · ৳${enrollment.amountPaid} (${nextStatus})`
+      );
+      saveDb(db);
+      res.json({ enrollment });
+    }
+  );
+
   app.patch(
     '/api/portal/enrollments/:id',
     requireAuth,
@@ -1714,12 +2037,80 @@ async function startServer() {
 
       const prevStatus = enrollment.status;
       enrollment.status = status;
-      if (prevStatus !== 'approved' && status === 'approved') {
-        const course = db.courses.find((c) => c.id === enrollment.courseId);
-        if (course) course.enrolledCount += 1;
+      const course = db.courses.find((c) => c.id === enrollment.courseId);
+      if (course) {
+        if (prevStatus !== 'approved' && status === 'approved') {
+          course.enrolledCount += 1;
+        } else if (prevStatus === 'approved' && status !== 'approved') {
+          course.enrolledCount = Math.max(0, course.enrolledCount - 1);
+        }
       }
+
+      const linkedTxn = db.transactions.find(
+        (t) => t.referenceType === 'course' && t.referenceId === enrollment.id
+      );
+      if (linkedTxn) {
+        linkedTxn.status =
+          status === 'approved'
+            ? 'completed'
+            : status === 'pending'
+              ? 'pending_verification'
+              : 'refunded';
+      }
+
+      recordAuditLog(
+        db,
+        user,
+        'ENROLLMENT_STATUS',
+        enrollment.courseTitle,
+        `${enrollment.studentName} · ${prevStatus} -> ${status} (৳${enrollment.amountPaid})`
+      );
       saveDb(db);
       res.json({ enrollment });
+    }
+  );
+
+  app.delete(
+    '/api/portal/enrollments/:id',
+    requireAuth,
+    requireRole(['admin', 'branch_manager']),
+    (req: AuthedRequest, res) => {
+      const user = req.authUser!;
+      const db = getDb();
+      const idx = db.enrollments.findIndex((e) => e.id === req.params.id);
+      if (idx === -1) {
+        res.status(404).json({ error: 'Enrollment not found' });
+        return;
+      }
+      const target = db.enrollments[idx];
+      if (user.role === 'branch_manager' && user.branchId && target.branchId !== user.branchId) {
+        res.status(403).json({ error: 'Branch managers can only manage enrollments for their own branch.' });
+        return;
+      }
+
+      const [removed] = db.enrollments.splice(idx, 1);
+      if (removed.status === 'approved') {
+        const course = db.courses.find((c) => c.id === removed.courseId);
+        if (course) course.enrolledCount = Math.max(0, course.enrolledCount - 1);
+      }
+      db.recycleBin.unshift({
+        id: `bin-${Date.now()}`,
+        entityType: 'enrollment',
+        originalId: removed.id,
+        label: `${removed.studentName} — ${removed.courseTitle}`,
+        deletedBy: user.name,
+        deletedAt: new Date().toISOString(),
+        snapshot: removed,
+      });
+      recordAuditLog(
+        db,
+        user,
+        'ENROLLMENT_DELETE',
+        removed.courseTitle,
+        `${removed.studentName} (৳${removed.amountPaid}) moved to Recycle Bin`
+      );
+      saveDb(db);
+      res.json({ deletedId: removed.id });
     }
   );
 
@@ -1728,7 +2119,7 @@ async function startServer() {
     '/api/portal/orders/:id',
     requireAuth,
     requireRole(['admin', 'branch_manager']),
-    (req, res) => {
+    (req: AuthedRequest, res) => {
       const status = req.body?.status as 'processing' | 'shipped' | 'delivered' | 'cancelled';
       if (!['processing', 'shipped', 'delivered', 'cancelled'].includes(status)) {
         res.status(400).json({ error: 'Invalid order status' });
@@ -1740,7 +2131,15 @@ async function startServer() {
         res.status(404).json({ error: 'Order not found' });
         return;
       }
+      const prev = order.status;
       order.status = status;
+      recordAuditLog(
+        db,
+        req.authUser!,
+        'ORDER_STATUS',
+        order.id,
+        `${order.customerName} · ${prev} -> ${status} (৳${order.totalAmount})`
+      );
       saveDb(db);
       res.json({ order });
     }
@@ -1811,6 +2210,12 @@ async function startServer() {
       if (typeof req.body?.[key] === 'string' && req.body[key].trim()) {
         db.settings[key] = req.body[key].trim();
       }
+    }
+    if (req.body?.dashboardConfig && typeof req.body.dashboardConfig === 'object') {
+      db.settings.dashboardConfig = normalizeDashboardConfig(
+        req.body.dashboardConfig,
+        db.settings.dashboardConfig
+      );
     }
     saveDb(db);
     res.json({ settings: db.settings });
