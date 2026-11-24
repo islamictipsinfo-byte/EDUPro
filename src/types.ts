@@ -10,6 +10,21 @@ export interface Branch {
   managerName: string;
   activeStudents: number;
   status: 'active' | 'inactive';
+  image?: string;
+}
+
+export interface MediaAsset {
+  id: string;
+  filename: string;
+  url: string;
+  originalName: string;
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+  sizeBytes: number;
+  uploadedByUserId: string;
+  uploadedByName: string;
+  uploadedByRole: UserRole;
+  category: string;
+  createdAt: string;
 }
 
 export interface User {

@@ -34,6 +34,7 @@ import type {
   HomepageConfig,
   Instructor,
   LearnerRewardProfile,
+  MediaAsset,
   Order,
   PaymentGatewayConfig,
   PaymentTransaction,
@@ -118,6 +119,7 @@ export interface DatabaseState {
   campaigns: BroadcastCampaign[];
   plugins: ApiPlugin[];
   webhooks: WebhookConfig[];
+  mediaAssets: MediaAsset[];
 }
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -1394,6 +1396,7 @@ function createInitialState(): DatabaseState {
     campaigns: ext.campaigns,
     plugins: ext.plugins,
     webhooks: ext.webhooks,
+    mediaAssets: [],
   };
 }
 
@@ -1605,6 +1608,7 @@ export function getDb(): DatabaseState {
       parsed.campaigns = parsed.campaigns ?? fallback.campaigns;
       parsed.plugins = parsed.plugins ?? fallback.plugins;
       parsed.webhooks = parsed.webhooks ?? fallback.webhooks;
+      parsed.mediaAssets = Array.isArray(parsed.mediaAssets) ? parsed.mediaAssets : [];
       if (!Array.isArray(parsed.batchWaitlists)) parsed.batchWaitlists = [];
       if (!Array.isArray(parsed.batchTransfers)) parsed.batchTransfers = [];
       if (!Array.isArray(parsed.batchNotifications)) parsed.batchNotifications = fallback.batchNotifications;

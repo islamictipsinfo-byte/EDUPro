@@ -1660,6 +1660,13 @@ export function CourseWizardModal({
                   </div>
                 </div>
 
+                <ImageUploadField
+                  label="SEO / OpenGraph Social Share Image (Optional)"
+                  value={ogImage}
+                  onChange={setOgImage}
+                  category="course"
+                />
+
                 {/* Live SERP Preview */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-left">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">

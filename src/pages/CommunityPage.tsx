@@ -10,6 +10,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { ImageUploadField } from '../components/ImageUploadField';
 import { useAuth } from '../context/AuthContext';
 import type { CategoryItem, CommunityPost } from '../types';
 
@@ -35,6 +36,7 @@ export function CommunityPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Exam Strategy & Tips');
   const [newContent, setNewContent] = useState('');
+  const [newImage, setNewImage] = useState('');
   const [commentTextByPost, setCommentTextByPost] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -67,11 +69,13 @@ export function CommunityPage() {
         title: newTitle.trim(),
         category: newCategory,
         content: newContent.trim(),
+        image: newImage.trim() || undefined,
       }),
     });
     setPosts((prev) => [res.post, ...prev]);
     setNewTitle('');
     setNewContent('');
+    setNewImage('');
     setMsg('Discussion post published to the AEC Community.');
   };
 
@@ -135,7 +139,7 @@ export function CommunityPage() {
               )}
             </div>
 
-            {user && (user.role === 'admin' || user.role === 'teacher' || user.role === 'student') && (
+            {user && (
               <form
                 onSubmit={handleCreatePost}
                 className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3"
@@ -169,6 +173,12 @@ export function CommunityPage() {
                   onChange={(e) => setNewContent(e.target.value)}
                   placeholder="Share grammar notes, exam advice, or ask a question..."
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                />
+                <ImageUploadField
+                  label="Attach Study Photo / Diagram (Optional · Device Upload & My Storage)"
+                  value={newImage}
+                  onChange={setNewImage}
+                  category="community"
                 />
                 <div className="flex items-center justify-between">
                   {msg ? <p className="text-xs font-semibold text-emerald-700">{msg}</p> : <span />}

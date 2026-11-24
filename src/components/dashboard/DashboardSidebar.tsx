@@ -106,8 +106,15 @@ export function DashboardSidebar({
           ? 'My Learning'
           : user.role === 'teacher'
             ? 'Student Roster'
-            : 'Students',
-      labelBn: user.role === 'student' ? 'আমার কোর্স' : 'শিক্ষার্থী',
+            : user.role === 'guardian'
+              ? 'Child Progress'
+              : 'Students',
+      labelBn:
+        user.role === 'student'
+          ? 'আমার কোর্স'
+          : user.role === 'guardian'
+            ? 'সন্তানের অগ্রগতি'
+            : 'শিক্ষার্থী',
       icon: GraduationCap,
       section: user.role === 'student' ? 'my_learning' : user.role === 'guardian' ? 'guardian_monitor' : 'enrollments',
     },

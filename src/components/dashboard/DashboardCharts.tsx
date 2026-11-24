@@ -19,7 +19,7 @@ import type {
   OverviewRange,
 } from '../../lib/dashboardAnalytics';
 import { DEFAULT_DASHBOARD_CONFIG } from '../../lib/domain';
-import type { DashboardColorConfig, DashboardCustomizationConfig } from '../../types';
+import type { DashboardColorConfig, DashboardCustomizationConfig, UserRole } from '../../types';
 
 /* ============================================================================
  * 1. VIVID GRADIENT KPI CARDS ROW
@@ -34,12 +34,14 @@ const FUTURISTIC_KPI_ICONS = {
 export function FuturisticKpiGrid({
   items,
   lang,
+  role = 'admin',
   colors = DEFAULT_DASHBOARD_CONFIG.colors,
   kpiLabels = DEFAULT_DASHBOARD_CONFIG.kpiLabels,
   onCardClick,
 }: {
   items: FuturisticKpiCard[];
   lang: 'en' | 'bn';
+  role?: UserRole;
   colors?: DashboardColorConfig;
   kpiLabels?: DashboardCustomizationConfig['kpiLabels'];
   onCardClick: (id: FuturisticKpiCard['id']) => void;
@@ -56,7 +58,12 @@ export function FuturisticKpiGrid({
       {items.map((card) => {
         const Icon = FUTURISTIC_KPI_ICONS[card.id];
         const [gradStart, gradEnd] = gradientById[card.id];
-        const label = lang === 'bn' ? card.labelBn : kpiLabels[card.id] || card.label;
+        const label =
+          lang === 'bn'
+            ? card.labelBn
+            : role === 'admin'
+              ? kpiLabels[card.id] || card.label
+              : card.label;
         return (
           <button
             key={card.id}
@@ -93,7 +100,7 @@ export function FuturisticKpiGrid({
                     {card.valueDisplay}
                   </span>
                   <span className="tabular-nums text-xs font-extrabold text-emerald-100">
-                    ↑ {card.deltaPercent}
+                    {card.deltaPercent.includes('%') ? `↑ ${card.deltaPercent}` : card.deltaPercent}
                   </span>
                 </div>
                 <p className="mt-0.5 text-[11px] font-medium text-white/80">
@@ -137,10 +144,16 @@ export function AnalyticsOverviewCard({
   const plotW = chartW - padL - padR;
   const plotH = chartH - padT - padB;
 
-  const maxVal = Math.max(2500, ...overview.studentsSeries);
-  const stepUnit = maxVal > 10000 ? 5000 : 500;
-  const yScaleMax = Math.max(2500, Math.ceil(maxVal / stepUnit) * stepUnit);
+  const maxVal = Math.max(
+    20,
+    ...overview.studentsSeries,
+    ...overview.enrollmentsSeries,
+    ...overview.viewsSeries
+  );
+  const stepUnit = maxVal > 10000 ? 5000 : maxVal > 1000 ? 500 : maxVal > 100 ? 50 : 20;
+  const yScaleMax = Math.max(20, Math.ceil(maxVal / stepUnit) * stepUnit);
   const yTicks = [0, 0.2, 0.4, 0.6, 0.8, 1].map((ratio) => Math.round(yScaleMax * ratio));
+  const seriesLabels = overview.seriesLabels ?? ['Students', 'Enrollments', 'Course Views'];
 
   const mapPoints = (vals: number[]) =>
     vals.map((v, idx) => {
@@ -202,15 +215,15 @@ export function AnalyticsOverviewCard({
         <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-[11px] font-semibold">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.chartStudentsColor }} />
-            <span>Students</span>
+            <span>{seriesLabels[0]}</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.chartEnrollmentsColor }} />
-            <span>Enrollments</span>
+            <span>{seriesLabels[1]}</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.chartViewsColor }} />
-            <span>Course Views</span>
+            <span>{seriesLabels[2]}</span>
           </span>
         </div>
       </div>
@@ -322,11 +335,13 @@ export function AnalyticsOverviewCard({
  * ========================================================================== */
 export function CourseProgressCard({
   progress,
+  title = 'Course Progress',
   onViewDetails,
   colors = DEFAULT_DASHBOARD_CONFIG.colors,
   darkMode = false,
 }: {
   progress: CourseProgressSummary;
+  title?: string;
   onViewDetails: () => void;
   colors?: DashboardColorConfig;
   darkMode?: boolean;
@@ -350,7 +365,7 @@ export function CourseProgressCard({
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15 text-amber-500">
             <Trophy className="h-4 w-4" />
           </span>
-          <h2 className="text-sm font-extrabold">Course Progress</h2>
+          <h2 className="text-sm font-extrabold">{title}</h2>
         </div>
         <GraduationCap className="h-5 w-5 opacity-60" style={{ color: colors.chartStudentsColor }} />
       </div>

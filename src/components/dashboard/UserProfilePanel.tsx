@@ -2,6 +2,7 @@ import { CheckCircle2, KeyRound, Save, UserCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import type { Branch, User } from '../../types';
+import { ImageUploadField } from '../ImageUploadField';
 
 interface UserProfilePanelProps {
   user: User;
@@ -190,16 +191,13 @@ export function UserProfilePanel({
           )}
 
           <div className="sm:col-span-2">
-            <label htmlFor="prof-avatar" className="block text-xs font-bold opacity-80">
-              Profile Photo URL (optional)
-            </label>
-            <input
-              id="prof-avatar"
-              type="text"
+            <ImageUploadField
+              label="Profile Photo (Upload from Device or Pick from My Storage)"
               value={avatar}
-              onChange={(e) => setAvatar(e.target.value)}
-              placeholder="/src/assets/images/avatar_student_portrait_1795437875582.jpg"
-              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900"
+              onChange={setAvatar}
+              category="avatar"
+              darkMode={darkMode}
+              placeholder="/uploads/... or /src/assets/images/..."
             />
           </div>
 

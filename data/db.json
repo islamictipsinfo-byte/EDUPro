@@ -387,7 +387,7 @@
       "avatar": "/src/assets/images/instructor_portrait_lead_1795411661581.jpg",
       "passwordHash": "24c63201f276f829c998de5936de3528:4aca2307c611696b9f1b59013e2432ca6cf363b9f43d9d3d6da5101d2694589e31ac15749a3a8e27523f56395503ca8626141f186f47a925dfb84661bc990502",
       "createdAt": "2026-01-05T09:00:00.000Z",
-      "lastLoginAt": "2026-11-23T16:19:27.700Z"
+      "lastLoginAt": "2026-11-24T05:08:48.975Z"
     },
     {
       "id": "u-manager",
@@ -397,7 +397,8 @@
       "role": "branch_manager",
       "branchId": "br-mirpur",
       "passwordHash": "031869447560929af3e21d61bf073f5a:7a422c98d68fab285bfb34af00d3f282d676ec2cfdbeae52074b44497ad50397a6adffb33942576903056761b80df170d072375133d6d030d224599120b57d0f",
-      "createdAt": "2026-01-06T09:00:00.000Z"
+      "createdAt": "2026-01-06T09:00:00.000Z",
+      "lastLoginAt": "2026-11-24T05:08:05.253Z"
     },
     {
       "id": "u-teacher",
@@ -409,7 +410,7 @@
       "avatar": "/src/assets/images/instructor_portrait_lead_1795411661581.jpg",
       "passwordHash": "6e4cfb8e4758de2501090772894f60c1:ae3f4a5d353c144e843b611128c6415e58ded4db2f5a7a2ff01773df74f34ac7b35976c05dd89bf63d7221939329ba226da62d5845baee62cc7c97fb18cdd26a",
       "createdAt": "2026-01-07T09:00:00.000Z",
-      "lastLoginAt": "2026-11-23T16:19:55.693Z"
+      "lastLoginAt": "2026-11-24T05:08:05.339Z"
     },
     {
       "id": "u-student",
@@ -421,7 +422,7 @@
       "rollNumber": "AEC-2026-101",
       "passwordHash": "bd31d94d5aaac33b6f37ff70d57e63be:6179786348dab26c1f8753c18aeb9d6180439ddd3876fb7fa84aa9b9632c9549b3ec1d0b84d3ba37ccd6e8f82d52a2e77c37b53a0080e9c3db2b88d4dd9568c1",
       "createdAt": "2026-01-10T09:00:00.000Z",
-      "lastLoginAt": "2026-11-23T16:20:16.162Z",
+      "lastLoginAt": "2026-11-24T05:08:49.060Z",
       "bio": "Preparing for HSC 2027 & IELTS Band 7.5"
     },
     {
@@ -446,7 +447,8 @@
         "u-student"
       ],
       "passwordHash": "6e59c86a4166e8072fc338b4a1970e47:5a571dc0f549b4207c6f72d01ae815490dad5b8b039c4314bd47fb00bec8aec55a36052a619d9817d75ead207513dbebae31a2754bd092bc6a344db31f7d3b50",
-      "createdAt": "2026-01-11T09:00:00.000Z"
+      "createdAt": "2026-01-11T09:00:00.000Z",
+      "lastLoginAt": "2026-11-24T05:08:49.151Z"
     }
   ],
   "instructors": [
@@ -4029,6 +4031,246 @@
   ],
   "auditLogs": [
     {
+      "id": "audit-1795496929227-5592",
+      "actorId": "u-guardian",
+      "actorName": "Kamrul Hasan (Guardian)",
+      "actorRole": "guardian",
+      "action": "MEDIA_DELETE",
+      "target": "cms-1795496929191-6e422878.png",
+      "details": "Removed from storage",
+      "severity": "warning",
+      "createdAt": "2026-11-24T05:08:49.227Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496929219-3d45",
+      "actorId": "u-student",
+      "actorName": "Arafat Rahman",
+      "actorRole": "student",
+      "action": "MEDIA_DELETE",
+      "target": "cms-1795496929181-631ed62b.png",
+      "details": "Removed from storage",
+      "severity": "warning",
+      "createdAt": "2026-11-24T05:08:49.219Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496929191-9570",
+      "actorId": "u-guardian",
+      "actorName": "Kamrul Hasan (Guardian)",
+      "actorRole": "guardian",
+      "action": "MEDIA_UPLOAD",
+      "target": "gd-test.png",
+      "details": "avatar · 0 KB",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:49.191Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496929182-a579",
+      "actorId": "u-student",
+      "actorName": "Arafat Rahman",
+      "actorRole": "student",
+      "action": "MEDIA_UPLOAD",
+      "target": "stu-test.png",
+      "details": "avatar · 0 KB",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:49.182Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496929171-4af3",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "MEDIA_DELETE",
+      "target": "cms-1795496885660-856bab91.png",
+      "details": "Removed from storage",
+      "severity": "warning",
+      "createdAt": "2026-11-24T05:08:49.172Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496929163-e596",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "MEDIA_DELETE",
+      "target": "cms-1795496885613-ef95c30e.png",
+      "details": "Removed from storage",
+      "severity": "warning",
+      "createdAt": "2026-11-24T05:08:49.163Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496929151-b474",
+      "actorId": "u-guardian",
+      "actorName": "Kamrul Hasan (Guardian)",
+      "actorRole": "guardian",
+      "action": "USER_LOGIN",
+      "target": "gu*****@alomsenglish.com",
+      "details": "Signed in to guardian workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:49.152Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496929060-01e6",
+      "actorId": "u-student",
+      "actorName": "Arafat Rahman",
+      "actorRole": "student",
+      "action": "USER_LOGIN",
+      "target": "st*****@alomsenglish.com",
+      "details": "Signed in to student workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:49.060Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496928975-a7b4",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:48.975Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496885985-7b3e",
+      "actorId": "u-manager",
+      "actorName": "Tariqul Islam",
+      "actorRole": "branch_manager",
+      "action": "BRANCH_UPDATE",
+      "target": "Mirpur DOHS Main Campus",
+      "details": "AEC-MPR (active)",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:05.985Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496885977-2a7d",
+      "actorId": "u-manager",
+      "actorName": "Tariqul Islam",
+      "actorRole": "branch_manager",
+      "action": "BRANCH_UPDATE",
+      "target": "Mirpur DOHS Main Campus",
+      "details": "AEC-MPR (active)",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:05.977Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496885661-f674",
+      "actorId": "u-guardian",
+      "actorName": "Kamrul Hasan (Guardian)",
+      "actorRole": "guardian",
+      "action": "MEDIA_UPLOAD",
+      "target": "gd-test.png",
+      "details": "avatar · 0 KB",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:05.661Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496885613-ae32",
+      "actorId": "u-student",
+      "actorName": "Arafat Rahman",
+      "actorRole": "student",
+      "action": "MEDIA_UPLOAD",
+      "target": "stu-test.png",
+      "details": "avatar · 0 KB",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:05.614Z",
+      "category": "system"
+    },
+    {
+      "id": "audit-1795496885580-0eb2",
+      "actorId": "u-guardian",
+      "actorName": "Kamrul Hasan (Guardian)",
+      "actorRole": "guardian",
+      "action": "USER_LOGIN",
+      "target": "gu*****@alomsenglish.com",
+      "details": "Signed in to guardian workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:05.580Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496885444-c1ec",
+      "actorId": "u-student",
+      "actorName": "Arafat Rahman",
+      "actorRole": "student",
+      "action": "USER_LOGIN",
+      "target": "st*****@alomsenglish.com",
+      "details": "Signed in to student workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:05.444Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496885340-7e7d",
+      "actorId": "u-teacher",
+      "actorName": "Mahmudul Hasan",
+      "actorRole": "teacher",
+      "action": "USER_LOGIN",
+      "target": "te*****@alomsenglish.com",
+      "details": "Signed in to teacher workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:05.340Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496885253-cc55",
+      "actorId": "u-manager",
+      "actorName": "Tariqul Islam",
+      "actorRole": "branch_manager",
+      "action": "USER_LOGIN",
+      "target": "ma*****@alomsenglish.com",
+      "details": "Signed in to branch_manager workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:05.253Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496884767-e452",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T05:08:04.768Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496177725-dab0",
+      "actorId": "u-manager",
+      "actorName": "Tariqul Islam",
+      "actorRole": "branch_manager",
+      "action": "USER_LOGIN",
+      "target": "ma*****@alomsenglish.com",
+      "details": "Signed in to branch_manager workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T04:56:17.725Z",
+      "category": "login"
+    },
+    {
+      "id": "audit-1795496155792-2f04",
+      "actorId": "u-admin",
+      "actorName": "Alomgir Hossain",
+      "actorRole": "admin",
+      "action": "USER_LOGIN",
+      "target": "ad***@alomsenglish.com",
+      "details": "Signed in to admin workspace",
+      "severity": "info",
+      "createdAt": "2026-11-24T04:55:55.792Z",
+      "category": "login"
+    },
+    {
       "id": "audit-1795450816163-b8fa",
       "actorId": "u-student",
       "actorName": "Arafat Rahman",
@@ -5514,5 +5756,6 @@
       "details": "Hybrid schedule & classroom Room 201 configured for SSC-27 Mirpur Evening Batch A.",
       "createdAt": "2026-04-01T10:00:00.000Z"
     }
-  ]
+  ],
+  "mediaAssets": []
 }

@@ -1,4 +1,22 @@
-import { ArrowRight, ExternalLink, Video, X } from 'lucide-react';
+import {
+  ArrowRight,
+  Award,
+  Building2,
+  CalendarCheck,
+  CheckCircle2,
+  ClipboardList,
+  ExternalLink,
+  Flame,
+  GraduationCap,
+  HardDrive,
+  MapPin,
+  Phone,
+  Play,
+  Radio,
+  UserPlus,
+  Video,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import {
   buildAnalyticsOverviewSeries,
@@ -13,7 +31,12 @@ import {
   type LiveSpotlightItem,
   type OverviewRange,
 } from '../../lib/dashboardAnalytics';
-import { DEFAULT_DASHBOARD_CONFIG, normalizeDashboardConfig, type PortalSection } from '../../lib/domain';
+import {
+  calculateStudentProgress,
+  DEFAULT_DASHBOARD_CONFIG,
+  normalizeDashboardConfig,
+  type PortalSection,
+} from '../../lib/domain';
 import type { AuditLogEntry, DashboardCustomizationConfig } from '../../types';
 import {
   AnalyticsOverviewCard,
@@ -34,6 +57,8 @@ import { SystemActivityLogsPanel } from './SystemActivityLogsPanel';
 interface DashboardOverviewProps {
   data: DashboardSourceData;
   viewerName?: string;
+  viewerAvatar?: string;
+  viewerRollNumber?: string;
   auditLogs?: AuditLogEntry[];
   searchQuery: string;
   overviewSubView: OverviewSubView;
@@ -49,6 +74,8 @@ interface DashboardOverviewProps {
 export function DashboardOverview({
   data,
   viewerName,
+  viewerAvatar,
+  viewerRollNumber,
   auditLogs = [],
   searchQuery,
   lang,
@@ -72,10 +99,25 @@ export function DashboardOverview({
   const topStudents = buildTopStudents(data);
 
   const handleKpiClick = (id: FuturisticKpiCard['id']) => {
+    if (data.role === 'student') {
+      if (id === 'courses') onNavigate('/exams');
+      else onSelectSection('my_learning');
+      return;
+    }
+    if (data.role === 'guardian') {
+      onSelectSection('guardian_monitor');
+      return;
+    }
+    if (data.role === 'branch_manager') {
+      if (id === 'students' || id === 'courses') onSelectSection('enrollments');
+      else if (id === 'teachers') onSelectSection('users');
+      else onSelectSection('courses', 'batches');
+      return;
+    }
     if (id === 'students') {
-      onSelectSection(data.role === 'student' ? 'my_learning' : 'enrollments');
+      onSelectSection('enrollments');
     } else if (id === 'teachers') {
-      onSelectSection(data.role === 'admin' ? 'users' : 'courses');
+      onSelectSection(data.role === 'admin' ? 'users' : 'exams');
     } else if (id === 'courses') {
       onSelectSection('courses', 'courses');
     } else if (id === 'batches') {
@@ -83,9 +125,49 @@ export function DashboardOverview({
     }
   };
 
+  const heroSubtitle =
+    data.role === 'student'
+      ? `Student Learning Hub${viewerRollNumber ? ` · Roll ${viewerRollNumber}` : ''}`
+      : data.role === 'branch_manager'
+        ? `${data.branch?.name || 'Campus'} (${data.branch?.code || 'BRANCH'}) · ${data.branch?.city || 'Operations'}`
+        : data.role === 'guardian'
+          ? `Guardian Academic Watch · ${(data.children ?? []).length} Linked Student(s)`
+          : data.role === 'teacher'
+            ? `Faculty Coaching Studio · ${(data.courses ?? []).length} Assigned Course(s)`
+            : cfg.heroSubtitle;
+
+  const heroAvatarSrc = viewerAvatar?.trim() || cfg.images.heroAvatarUrl;
+  const heroBgSrc =
+    (data.role === 'branch_manager' && data.branch?.image?.trim()) || cfg.images.heroBannerBgUrl;
+
+  const progressCardTitle =
+    data.role === 'student'
+      ? 'My Course Progress'
+      : data.role === 'guardian'
+        ? 'Children Course Progress'
+        : data.role === 'branch_manager'
+          ? 'Branch Completion Rate'
+          : 'Course Progress';
+
+  const topListTitle =
+    data.role === 'student'
+      ? 'My Enrolled Courses'
+      : data.role === 'guardian'
+        ? 'Linked Children'
+        : data.role === 'branch_manager'
+          ? 'Campus Top Students'
+          : 'Top Students';
+
+  const topListEmptyText =
+    data.role === 'student'
+      ? 'Enroll in a course to track progress here.'
+      : data.role === 'guardian'
+        ? 'Link a student by Roll Number to view progress.'
+        : 'No student exam or course metrics recorded yet.';
+
   return (
     <div className="space-y-5">
-      {/* ROW 0: FUTURISTIC WELCOME HERO BANNER */}
+      {/* ROW 0: FUTURISTIC ROLE-AWARE WELCOME HERO BANNER */}
       {cfg.widgets.heroBanner && (
         <div
           style={{
@@ -93,14 +175,12 @@ export function DashboardOverview({
           }}
           className="relative overflow-hidden rounded-3xl p-5 text-white shadow-xl sm:px-7 sm:py-5"
         >
-          {/* Glowing electric ribbon */}
           <div className="pointer-events-none absolute -right-12 -top-12 h-56 w-56 rounded-full bg-cyan-300/25 blur-3xl" />
           <div className="pointer-events-none absolute bottom-0 left-1/3 h-28 w-72 rounded-full bg-blue-400/20 blur-2xl" />
 
-          {/* Right Campus Building Silhouette */}
           <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-72 overflow-hidden lg:block">
             <img
-              src={cfg.images.heroBannerBgUrl}
+              src={heroBgSrc}
               alt="Campus Banner Backdrop"
               className="h-full w-full object-cover opacity-75"
               referrerPolicy="no-referrer"
@@ -114,12 +194,11 @@ export function DashboardOverview({
           </div>
 
           <div className="relative flex flex-col items-center justify-between gap-5 lg:flex-row">
-            {/* Left Student Portrait + Hero Copy */}
             <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
               <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full border-4 border-cyan-300/70 bg-blue-900 shadow-lg sm:h-28 sm:w-28">
                 <img
-                  src={cfg.images.heroAvatarUrl}
-                  alt="Dashboard Welcome Avatar"
+                  src={heroAvatarSrc}
+                  alt={viewerName || 'Dashboard User Avatar'}
                   referrerPolicy="no-referrer"
                   className="h-full w-full object-cover"
                 />
@@ -127,44 +206,62 @@ export function DashboardOverview({
 
               <div>
                 <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-                  {data.role !== 'admin' && cfg.heroTitle === DEFAULT_DASHBOARD_CONFIG.heroTitle
-                    ? `Welcome Back, ${viewerName?.split(' ')[0] || 'Member'}!`
+                  {data.role !== 'admin' || cfg.heroTitle === DEFAULT_DASHBOARD_CONFIG.heroTitle
+                    ? data.role === 'admin'
+                      ? cfg.heroTitle
+                      : `Welcome Back, ${viewerName?.split(' ')[0] || 'Member'}!`
                     : cfg.heroTitle}
                 </h1>
-                <p className="mt-0.5 text-sm font-bold text-cyan-100">{cfg.heroSubtitle}</p>
+                <p className="mt-0.5 text-sm font-bold text-cyan-100">{heroSubtitle}</p>
                 <p className="mt-1 text-xs italic text-blue-100/90">{cfg.heroQuote}</p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSelectSection(
-                      data.role === 'teacher'
-                        ? 'enrollments'
+                <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSelectSection(
+                        data.role === 'teacher'
+                          ? 'enrollments'
+                          : data.role === 'student'
+                            ? 'my_learning'
+                            : data.role === 'guardian'
+                              ? 'guardian_monitor'
+                              : data.role === 'branch_manager'
+                                ? 'enrollments'
+                                : cfg.heroCtaSection
+                      )
+                    }
+                    style={{
+                      backgroundColor: cfg.colors.heroButtonBg,
+                      color: cfg.colors.heroButtonText,
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full px-5 py-2 text-xs font-extrabold shadow-md transition-transform hover:-translate-y-0.5 hover:opacity-95"
+                  >
+                    <span>
+                      {data.role === 'teacher'
+                        ? 'Open Student Roster'
                         : data.role === 'student'
-                          ? 'my_learning'
+                          ? 'Open My Learning'
                           : data.role === 'guardian'
-                            ? 'guardian_monitor'
-                            : cfg.heroCtaSection
-                    )
-                  }
-                  style={{
-                    backgroundColor: cfg.colors.heroButtonBg,
-                    color: cfg.colors.heroButtonText,
-                  }}
-                  className="mt-3.5 inline-flex items-center gap-1.5 rounded-full px-5 py-2 text-xs font-extrabold shadow-md transition-transform hover:-translate-y-0.5 hover:opacity-95"
-                >
-                  <span>
-                    {data.role === 'teacher'
-                      ? 'Open Student Roster'
-                      : data.role === 'student'
-                        ? 'My Learning Hub'
-                        : cfg.heroCtaLabel}
-                  </span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </button>
+                            ? 'Child 360° Monitor'
+                            : data.role === 'branch_manager'
+                              ? 'Manage Branch Enrollments'
+                              : cfg.heroCtaLabel}
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onQuickAction('open_storage')}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/15 px-4 py-2 text-xs font-bold text-white backdrop-blur-xs transition-colors hover:bg-white/25"
+                  >
+                    <HardDrive className="h-3.5 w-3.5" />
+                    <span>My Storage ({data.metrics.mediaCount ?? 0})</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Right Golden Motto Callout */}
             <div className="relative hidden pr-44 text-right lg:block">
               <p
                 style={{ color: cfg.colors.heroMottoColor }}
@@ -190,10 +287,312 @@ export function DashboardOverview({
         <FuturisticKpiGrid
           items={kpiCards}
           lang={lang}
+          role={data.role}
           colors={cfg.colors}
           kpiLabels={cfg.kpiLabels}
           onCardClick={handleKpiClick}
         />
+      )}
+
+      {/* ROLE-SPECIFIC DYNAMIC WORKSPACE SPOTLIGHT */}
+      {data.role === 'student' && (
+        <div
+          className={`grid grid-cols-1 gap-4 rounded-2xl border p-4 shadow-sm lg:grid-cols-12 ${
+            darkMode
+              ? 'border-[#1E2E52] bg-[#0F1B3B] text-white'
+              : 'border-white/80 bg-white/90 text-slate-900 backdrop-blur-md'
+          }`}
+        >
+          <div className="lg:col-span-7 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-sm font-extrabold">
+                <Play className="h-4 w-4 text-sky-500" />
+                <span>Resume Active Courses</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => onNavigate('/learn')}
+                className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-300"
+              >
+                Open Classroom →
+              </button>
+            </div>
+            {(data.enrollments ?? []).length === 0 ? (
+              <div className="flex items-center justify-between rounded-xl border border-dashed border-slate-300/80 p-3 text-xs">
+                <span className="opacity-75">You are not enrolled in any active course yet.</span>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/courses')}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 font-bold text-white"
+                >
+                  Browse Courses
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {(data.enrollments ?? []).slice(0, 2).map((enr) => {
+                  const totalLes = (data.lessons ?? []).filter((l) => l.courseId === enr.courseId).length;
+                  const pct = calculateStudentProgress(totalLes, enr.completedLessonIds);
+                  return (
+                    <div
+                      key={enr.id}
+                      className={`rounded-xl border p-3 ${
+                        darkMode ? 'border-[#25365E] bg-[#132043]' : 'border-slate-200 bg-slate-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs font-extrabold">{enr.courseTitle}</p>
+                        <span className="tabular-nums text-[11px] font-extrabold text-emerald-600 dark:text-emerald-300">
+                          {pct}%
+                        </span>
+                      </div>
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[11px] opacity-75">
+                        <span>
+                          {enr.completedLessonIds?.length ?? 0}/{totalLes} lessons
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onNavigate('/learn')}
+                          className="font-bold text-blue-600 hover:underline dark:text-blue-300"
+                        >
+                          Continue
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-5 flex flex-col justify-between gap-2.5 rounded-xl border border-amber-300/40 bg-amber-500/10 p-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Award className="h-4 w-4 text-amber-500" />
+                <span className="text-xs font-extrabold">Rewards, Assignments &amp; Photo</span>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/20 px-2 py-0.5 text-[11px] font-extrabold text-amber-700 dark:text-amber-300">
+                <Flame className="h-3 w-3" /> {data.rewards?.streakDays ?? 0}d Streak
+              </span>
+            </div>
+            <p className="text-xs opacity-80">
+              Pending assignments: <strong>{(data.assignments ?? []).length - (data.assignmentSubmissions ?? []).length < 0 ? 0 : (data.assignments ?? []).length - (data.assignmentSubmissions ?? []).length}</strong> ·
+              Certificates earned: <strong>{(data.certificates ?? []).length}</strong>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onNavigate('/learn')}
+                className="rounded-lg bg-[#062436] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-600"
+              >
+                Upload Homework Photo
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectSection('profile')}
+                className="rounded-lg border border-slate-300/70 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-slate-800 hover:bg-white"
+              >
+                Update My Photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {data.role === 'branch_manager' && data.branch && (
+        <div
+          className={`flex flex-col justify-between gap-4 rounded-2xl border p-4 shadow-sm sm:flex-row sm:items-center ${
+            darkMode
+              ? 'border-[#1E2E52] bg-[#0F1B3B] text-white'
+              : 'border-white/80 bg-white/90 text-slate-900 backdrop-blur-md'
+          }`}
+        >
+          <div className="flex items-center gap-3.5">
+            {data.branch.image ? (
+              <img
+                src={data.branch.image}
+                alt={data.branch.name}
+                referrerPolicy="no-referrer"
+                className="h-16 w-24 shrink-0 rounded-xl border border-slate-200 object-cover"
+              />
+            ) : (
+              <div className="flex h-16 w-20 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600">
+                <Building2 className="h-7 w-7" />
+              </div>
+            )}
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono-tabular rounded bg-sky-500/15 px-2 py-0.5 text-[10px] font-extrabold text-sky-700 dark:text-sky-300">
+                  {data.branch.code}
+                </span>
+                <span className="text-sm font-extrabold">{data.branch.name}</span>
+              </div>
+              <p className="mt-1 flex flex-wrap items-center gap-3 text-xs opacity-75">
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" /> {data.branch.address}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Phone className="h-3.5 w-3.5" /> {data.branch.phone}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onSelectSection('branches')}
+              className="rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100"
+            >
+              Edit Campus &amp; Photo
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectSection('enrollments')}
+              className="rounded-xl bg-[#062436] px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-600"
+            >
+              Pending Approvals ({data.metrics.pendingApprovals ?? 0})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {data.role === 'guardian' && (
+        <div
+          className={`rounded-2xl border p-4 shadow-sm ${
+            darkMode
+              ? 'border-[#1E2E52] bg-[#0F1B3B] text-white'
+              : 'border-white/80 bg-white/90 text-slate-900 backdrop-blur-md'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-extrabold">
+              <GraduationCap className="h-4 w-4 text-blue-500" />
+              <span>Linked Students Overview</span>
+            </h2>
+            <button
+              type="button"
+              onClick={() => onSelectSection('guardian_monitor')}
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              <span>Link / View 360° Progress</span>
+            </button>
+          </div>
+
+          {(data.children ?? []).length === 0 ? (
+            <p className="mt-2.5 text-xs opacity-75">
+              No students linked yet. Click &ldquo;Link / View 360° Progress&rdquo; to connect a student by Roll Number.
+            </p>
+          ) : (
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {(data.children ?? []).map((child) => {
+                const avg =
+                  child.examAttempts.length > 0
+                    ? Math.round(
+                        child.examAttempts.reduce((s, a) => s + a.percentage, 0) /
+                          child.examAttempts.length
+                      )
+                    : 0;
+                const att = child.attendance ?? [];
+                const present = att.filter((a) => a.status === 'present' || a.status === 'late').length;
+                const attPct = att.length > 0 ? Math.round((present / att.length) * 100) : 100;
+
+                return (
+                  <div
+                    key={child.student.id}
+                    className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${
+                      darkMode ? 'border-[#25365E] bg-[#132043]' : 'border-slate-200 bg-slate-50/70'
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      {child.student.avatar ? (
+                        <img
+                          src={child.student.avatar}
+                          alt={child.student.name}
+                          referrerPolicy="no-referrer"
+                          className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-blue-500/30"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-extrabold text-white">
+                          {child.student.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-extrabold">{child.student.name}</p>
+                        <p className="font-mono-tabular truncate text-[10px] opacity-70">
+                          {child.student.rollNumber || child.student.email}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right text-[11px]">
+                      <p className="tabular-nums font-extrabold text-emerald-600 dark:text-emerald-300">
+                        Exam: {avg}%
+                      </p>
+                      <p className="tabular-nums opacity-75">Att: {attPct}%</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {data.role === 'teacher' && (
+        <div
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 shadow-sm ${
+            darkMode
+              ? 'border-[#1E2E52] bg-[#0F1B3B] text-white'
+              : 'border-white/80 bg-white/90 text-slate-900 backdrop-blur-md'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-300">
+              <CheckCircle2 className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-sm font-extrabold">Faculty Teaching &amp; Grading Desk</h2>
+              <p className="text-xs opacity-75">
+                Pending assignment reviews:{' '}
+                <strong className="tabular-nums">{data.metrics.pendingSubmissions ?? 0}</strong> ·
+                Scheduled live lessons:{' '}
+                <strong className="tabular-nums">
+                  {(data.lessons ?? []).filter((l) => l.lessonType === 'live').length}
+                </strong>
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onSelectSection('lessons')}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-rose-700"
+            >
+              <Radio className="h-3.5 w-3.5" />
+              <span>Go Live / Lessons</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectSection('attendance_finance')}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300/70 px-3.5 py-2 text-xs font-bold hover:bg-slate-50 dark:hover:bg-white/10"
+            >
+              <CalendarCheck className="h-3.5 w-3.5" />
+              <span>Take Attendance</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectSection('exams')}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#062436] px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-600"
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              <span>Grade Scripts</span>
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ROW 2: ANALYTICS OVERVIEW + COURSE PROGRESS DONUT + LIVE CLASS NOW */}
@@ -215,10 +614,17 @@ export function DashboardOverview({
             <div className="lg:col-span-4">
               <CourseProgressCard
                 progress={courseProgress}
+                title={progressCardTitle}
                 colors={cfg.colors}
                 darkMode={darkMode}
                 onViewDetails={() =>
-                  onSelectSection(data.role === 'student' ? 'my_learning' : 'enrollments')
+                  onSelectSection(
+                    data.role === 'student'
+                      ? 'my_learning'
+                      : data.role === 'guardian'
+                        ? 'guardian_monitor'
+                        : 'enrollments'
+                  )
                 }
               />
             </div>
@@ -229,7 +635,7 @@ export function DashboardOverview({
               <LiveClassSpotlightCard
                 spotlight={liveSpotlight}
                 colors={cfg.colors}
-                bannerOverride={cfg.images.liveClassBannerUrl}
+                bannerOverride={data.role === 'admin' ? cfg.images.liveClassBannerUrl : ''}
                 onJoinClass={(item) => setLiveModal(item)}
               />
             </div>
@@ -249,7 +655,15 @@ export function DashboardOverview({
                 items={recentActivities}
                 darkMode={darkMode}
                 onViewAll={() =>
-                  onSelectSection(data.role === 'admin' ? 'attendance_finance' : 'enrollments')
+                  onSelectSection(
+                    data.role === 'admin'
+                      ? 'attendance_finance'
+                      : data.role === 'student'
+                        ? 'my_learning'
+                        : data.role === 'guardian'
+                          ? 'guardian_monitor'
+                          : 'enrollments'
+                  )
                 }
               />
             </div>
@@ -260,7 +674,17 @@ export function DashboardOverview({
               <UpcomingClassesCard
                 rows={upcomingClasses}
                 darkMode={darkMode}
-                onViewCalendar={() => onSelectSection('lessons')}
+                onViewCalendar={() =>
+                  onSelectSection(
+                    data.role === 'student'
+                      ? 'my_learning'
+                      : data.role === 'guardian'
+                        ? 'guardian_monitor'
+                        : data.role === 'branch_manager'
+                          ? 'courses'
+                          : 'lessons'
+                  )
+                }
               />
             </div>
           )}
@@ -269,9 +693,17 @@ export function DashboardOverview({
             <div className="xl:col-span-3">
               <TopStudentsProgressCard
                 students={topStudents}
+                title={topListTitle}
+                emptyText={topListEmptyText}
                 darkMode={darkMode}
                 onViewAll={() =>
-                  onSelectSection(data.role === 'student' ? 'my_learning' : 'enrollments')
+                  onSelectSection(
+                    data.role === 'student'
+                      ? 'my_learning'
+                      : data.role === 'guardian'
+                        ? 'guardian_monitor'
+                        : 'enrollments'
+                  )
                 }
               />
             </div>
@@ -280,6 +712,7 @@ export function DashboardOverview({
           {cfg.widgets.quickActions && (
             <div className="xl:col-span-3">
               <QuickActionsCard
+                role={data.role}
                 onTrigger={onQuickAction}
                 canCustomize={canCustomize}
                 darkMode={darkMode}
@@ -356,12 +789,18 @@ export function DashboardOverview({
                 type="button"
                 onClick={() => {
                   setLiveModal(null);
-                  onSelectSection('lessons');
+                  onSelectSection(
+                    data.role === 'student'
+                      ? 'my_learning'
+                      : data.role === 'guardian'
+                        ? 'guardian_monitor'
+                        : 'lessons'
+                  );
                 }}
                 className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                <span>Manage Lessons</span>
+                <span>{data.role === 'student' ? 'My Learning' : 'Manage Lessons'}</span>
               </button>
             </div>
           </div>

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CertificateModal } from '../components/courses/CertificateModal';
+import { ImageUploadField } from '../components/ImageUploadField';
 import { ScormPlayerModal } from '../components/ScormPlayerModal';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -870,6 +871,36 @@ export function LearnPage({ navigate }: LearnPageProps) {
                             <p className="mt-1.5 text-slate-700">
                               Your response: {existingSub.answerText || existingSub.submissionText}
                             </p>
+                            {existingSub.attachmentUrl && (
+                              <div className="mt-2">
+                                {/\.(png|jpg|jpeg|webp|gif)$/i.test(existingSub.attachmentUrl) ||
+                                existingSub.attachmentUrl.startsWith('/uploads/') ? (
+                                  <a
+                                    href={existingSub.attachmentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+                                  >
+                                    <img
+                                      src={existingSub.attachmentUrl}
+                                      alt="Submitted assignment attachment"
+                                      referrerPolicy="no-referrer"
+                                      className="h-24 w-36 object-cover"
+                                    />
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={existingSub.attachmentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 font-bold text-indigo-600 hover:underline"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    <span>View Attached File</span>
+                                  </a>
+                                )}
+                              </div>
+                            )}
                             {existingSub.feedback && (
                               <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 font-semibold text-amber-950">
                                 Teacher Feedback: {existingSub.feedback}
@@ -881,7 +912,7 @@ export function LearnPage({ navigate }: LearnPageProps) {
                         {activeEnrollment && (
                           <form
                             onSubmit={(e) => handleSubmitAssignment(e, asg)}
-                            className="mt-3 space-y-2"
+                            className="mt-3 space-y-2.5"
                           >
                             <textarea
                               rows={2}
@@ -897,16 +928,16 @@ export function LearnPage({ navigate }: LearnPageProps) {
                               placeholder="Write your assignment answer or essay response..."
                               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
                             />
-                            <div className="flex flex-wrap items-center gap-2">
-                              <input
-                                type="url"
-                                value={draftUrls[asg.id] ?? existingSub?.attachmentUrl ?? ''}
-                                onChange={(e) =>
-                                  setDraftUrls((prev) => ({ ...prev, [asg.id]: e.target.value }))
-                                }
-                                placeholder="Optional Drive/PDF link (https://...)"
-                                className="min-w-[200px] flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
-                              />
+                            <ImageUploadField
+                              label="Attach Answer Sheet Photo / Image (Device Upload or My Storage)"
+                              value={draftUrls[asg.id] ?? existingSub?.attachmentUrl ?? ''}
+                              onChange={(url) =>
+                                setDraftUrls((prev) => ({ ...prev, [asg.id]: url }))
+                              }
+                              category="assignment"
+                              placeholder="/uploads/... or optional Drive/PDF link (https://...)"
+                            />
+                            <div className="flex justify-end">
                               <button
                                 type="submit"
                                 disabled={submittingAsgId === asg.id}

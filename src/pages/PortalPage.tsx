@@ -17,11 +17,14 @@ import {
   EyeOff,
   FileText,
   Flame,
+  FolderOpen,
   GraduationCap,
   Heart,
+  Image as ImageIcon,
   Layers,
   LayoutDashboard,
   LayoutTemplate,
+  Link2,
   LogOut,
   Megaphone,
   Package,
@@ -69,6 +72,8 @@ import {
 import { UserProfilePanel } from '../components/dashboard/UserProfilePanel';
 import { UsersManagementPanel } from '../components/dashboard/UsersManagementPanel';
 import { HomepageCmsStudio } from '../components/HomepageCmsStudio';
+import { ImageUploadField } from '../components/ImageUploadField';
+import { MyStorageModal } from '../components/MyStorageModal';
 import { PaymentSystemPanel } from '../components/PaymentSystemPanel';
 import {
   AiEcosystemSecurityPanel,
@@ -139,6 +144,13 @@ interface GuardianChildData {
   enrollments: Enrollment[];
   examAttempts: ExamAttempt[];
   lessonsCountByCourse: Record<string, number>;
+  attendance?: AttendanceRecord[];
+  assignments?: CourseAssignment[];
+  assignmentSubmissions?: AssignmentSubmission[];
+  certificates?: CourseCertificate[];
+  orders?: Order[];
+  transactions?: PaymentTransaction[];
+  rewards?: LearnerRewardProfile | null;
 }
 
 interface PortalPayload {
@@ -296,7 +308,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
   const [examOptD, setExamOptD] = useState('');
   const [examCorrect, setExamCorrect] = useState(0);
 
-  // Admin: Branch Create / Edit / Delete state
+  // Admin / Branch Manager: Branch Create / Edit / Delete state
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [brName, setBrName] = useState('');
   const [brCode, setBrCode] = useState('');
@@ -306,8 +318,15 @@ export function PortalPage({ navigate }: PortalPageProps) {
   const [brManager, setBrManager] = useState('');
   const [brStudents, setBrStudents] = useState('0');
   const [brStatus, setBrStatus] = useState<'active' | 'inactive'>('active');
+  const [brImage, setBrImage] = useState('');
   const [brError, setBrError] = useState<string | null>(null);
   const [confirmBranchDeleteId, setConfirmBranchDeleteId] = useState<string | null>(null);
+
+  // My Storage & Guardian link state
+  const [storageModalOpen, setStorageModalOpen] = useState(false);
+  const [guardianLinkInput, setGuardianLinkInput] = useState('');
+  const [guardianLinkError, setGuardianLinkError] = useState<string | null>(null);
+  const [guardianLinking, setGuardianLinking] = useState(false);
 
   // Quick Action target role for Users Studio
   const [uRole, setURole] = useState<UserRole>('teacher');
@@ -627,6 +646,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
     setBrManager('');
     setBrStudents('0');
     setBrStatus('active');
+    setBrImage('');
     setBrError(null);
   };
 
@@ -640,6 +660,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
     setBrManager(b.managerName);
     setBrStudents(String(b.activeStudents));
     setBrStatus(b.status);
+    setBrImage(b.image ?? '');
     setBrError(null);
   };
 
@@ -656,6 +677,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
         managerName: brManager.trim(),
         activeStudents: Number(brStudents) || 0,
         status: brStatus,
+        image: brImage.trim(),
       };
       if (editingBranchId) {
         await apiFetch(`/api/portal/branches/${editingBranchId}`, {
@@ -706,6 +728,34 @@ export function PortalPage({ navigate }: PortalPageProps) {
     });
     await Promise.all([loadPortal(), refreshBootstrap()]);
     notify('Center settings saved.');
+  };
+
+  const handleLinkGuardianStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guardianLinkInput.trim()) return;
+    setGuardianLinkError(null);
+    setGuardianLinking(true);
+    try {
+      const res = await apiFetch<{ student: User }>('/api/portal/guardian/link-student', {
+        method: 'POST',
+        body: JSON.stringify({ query: guardianLinkInput.trim() }),
+      });
+      setGuardianLinkInput('');
+      await Promise.all([loadPortal(), refreshBootstrap()]);
+      notify(`Linked student ${res.student.name} (${res.student.rollNumber || res.student.email})!`);
+    } catch (err) {
+      setGuardianLinkError(err instanceof Error ? err.message : 'Could not link student.');
+    } finally {
+      setGuardianLinking(false);
+    }
+  };
+
+  const handleUnlinkGuardianStudent = async (studentId: string, studentName: string) => {
+    await apiFetch(`/api/portal/guardian/link-student/${encodeURIComponent(studentId)}`, {
+      method: 'DELETE',
+    });
+    await Promise.all([loadPortal(), refreshBootstrap()]);
+    notify(`Unlinked ${studentName} from guardian monitor.`);
   };
 
   const pendingApprovalsCount = (data?.enrollments ?? []).filter((e) => e.status === 'pending').length;
@@ -788,7 +838,11 @@ export function PortalPage({ navigate }: PortalPageProps) {
         setCourseModalOpen(true);
         break;
       case 'add_post':
-        handleSectionRoute('catalog_cms', 'posts');
+        if (user.role === 'student' || user.role === 'guardian') {
+          navigate('/community');
+        } else {
+          handleSectionRoute('catalog_cms', 'posts');
+        }
         break;
       case 'create_category':
         handleSectionRoute('catalog_cms', 'categories');
@@ -803,10 +857,61 @@ export function PortalPage({ navigate }: PortalPageProps) {
         handleSectionRoute('catalog_cms', 'products');
         break;
       case 'take_exam':
-        handleSectionRoute('exams');
+        if (user.role === 'student' || user.role === 'guardian') {
+          navigate('/exams');
+        } else {
+          handleSectionRoute('exams');
+        }
         break;
       case 'customize':
         setCustomizerOpen(true);
+        break;
+      case 'open_storage':
+        setStorageModalOpen(true);
+        break;
+      case 'resume_learning':
+        navigate('/learn');
+        break;
+      case 'my_batches':
+        handleSectionRoute('my_learning');
+        break;
+      case 'my_profile':
+        handleSectionRoute('profile');
+        break;
+      case 'child_monitor':
+      case 'link_student':
+        handleSectionRoute('guardian_monitor');
+        break;
+      case 'branch_edit':
+        if (user.role === 'branch_manager' && data?.branch) {
+          startEditBranch(data.branch);
+        }
+        handleSectionRoute('branches');
+        break;
+      case 'branch_finance':
+        if (user.role === 'guardian') {
+          handleSectionRoute('guardian_monitor');
+        } else {
+          handleSectionRoute('attendance_finance');
+        }
+        break;
+      case 'mark_attendance':
+        handleSectionRoute('attendance_finance');
+        break;
+      case 'add_lesson':
+        if (user.role === 'teacher' || user.role === 'admin') {
+          setEditingLesson(null);
+          setLessonModalOpen(true);
+        } else {
+          handleSectionRoute('lessons');
+        }
+        break;
+      case 'grade_scripts':
+        handleSectionRoute('exams');
+        break;
+      case 'student_roster':
+      case 'manage_enrollments':
+        handleSectionRoute('enrollments');
         break;
     }
   };
@@ -935,6 +1040,8 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 {currentSection === 'overview' && data && (
                   <DashboardOverview
                     viewerName={user.name}
+                    viewerAvatar={user.avatar}
+                    viewerRollNumber={user.rollNumber}
                     data={{
                       ...data,
                       instructors: data.instructors ?? bootstrap?.instructors ?? [],
@@ -1207,8 +1314,30 @@ export function PortalPage({ navigate }: PortalPageProps) {
                                         </span>
                                       </div>
                                       <p className="rounded-lg bg-white p-2.5 text-slate-700 border border-slate-200">
-                                        {sub.answerText || sub.submissionText || '(Attachment)'}
+                                        {sub.answerText || sub.submissionText || '(Photo/Attachment Submission)'}
                                       </p>
+                                      {sub.attachmentUrl && (
+                                        <div className="flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50/50 p-2">
+                                          <img
+                                            src={sub.attachmentUrl}
+                                            alt={`Homework submission from ${sub.studentName}`}
+                                            referrerPolicy="no-referrer"
+                                            className="h-14 w-20 rounded-md border border-indigo-200 object-cover"
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none';
+                                            }}
+                                          />
+                                          <a
+                                            href={sub.attachmentUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:underline"
+                                          >
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                            <span>Inspect Uploaded Homework Photo</span>
+                                          </a>
+                                        </div>
+                                      )}
                                       <div className="flex flex-wrap items-center gap-2">
                                         <input
                                           type="number"
@@ -2060,21 +2189,21 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 />
               )}
 
-              {/* BRANCHES (FULL EDIT, UPDATE, ACTIVE/DEACTIVE, SOFT-DELETE) */}
+              {/* BRANCHES (FULL EDIT, UPDATE, CAMPUS PHOTO UPLOAD, ACTIVE/DEACTIVE, SOFT-DELETE) */}
               {currentSection === 'branches' && data && (
                 <div className="space-y-6">
-                  {user.role === 'admin' && (
+                  {(user.role === 'admin' || (user.role === 'branch_manager' && Boolean(editingBranchId))) && (
                     <form
                       onSubmit={handleSaveBranch}
-                      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-3"
+                      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <h2 className="text-lg font-extrabold text-slate-900">
-                            {editingBranchId ? 'Edit Campus Branch' : 'Add New Campus Branch'}
+                            {editingBranchId ? 'Edit Campus Branch & Photo' : 'Add New Campus Branch'}
                           </h2>
                           <p className="text-xs text-slate-500">
-                            Manage physical &amp; hybrid branch campuses, activate/deactivate visibility on checkout, or soft-delete to Recycle Bin.
+                            Manage physical &amp; hybrid branch campuses, upload campus pictures to My Storage, or manage directory visibility.
                           </p>
                         </div>
                         {editingBranchId && (
@@ -2092,6 +2221,13 @@ export function PortalPage({ navigate }: PortalPageProps) {
                           {brError}
                         </p>
                       )}
+                      <ImageUploadField
+                        label="Campus Branch Photo (Upload from Device or Pick from My Storage)"
+                        value={brImage}
+                        onChange={setBrImage}
+                        category="branch"
+                        darkMode={darkMode}
+                      />
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <input
                           type="text"
@@ -2104,10 +2240,11 @@ export function PortalPage({ navigate }: PortalPageProps) {
                         <input
                           type="text"
                           required
+                          disabled={user.role !== 'admin'}
                           placeholder="Code (e.g. AEC-DMD)"
                           value={brCode}
                           onChange={(e) => setBrCode(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm uppercase"
+                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm uppercase disabled:bg-slate-100 disabled:text-slate-500"
                         />
                         <input
                           type="text"
@@ -2152,9 +2289,10 @@ export function PortalPage({ navigate }: PortalPageProps) {
                           className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
                         />
                         <select
+                          disabled={user.role !== 'admin'}
                           value={brStatus}
                           onChange={(e) => setBrStatus(e.target.value as 'active' | 'inactive')}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
+                          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:bg-slate-100 disabled:text-slate-500"
                         >
                           <option value="active">Status: Active</option>
                           <option value="inactive">Status: Inactive</option>
@@ -2164,7 +2302,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
                         type="submit"
                         className="rounded-xl bg-[#062436] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0b3854]"
                       >
-                        {editingBranchId ? 'Update Branch' : 'Create Branch'}
+                        {editingBranchId ? 'Update Campus Branch' : 'Create Branch'}
                       </button>
                     </form>
                   )}
@@ -2173,76 +2311,98 @@ export function PortalPage({ navigate }: PortalPageProps) {
                     {(data.branches ?? []).map((b) => {
                       const confirming = confirmBranchDeleteId === b.id;
                       const isActive = b.status === 'active';
+                      const canEditThisBranch =
+                        user.role === 'admin' || (user.role === 'branch_manager' && user.branchId === b.id);
                       return (
                         <div
                           key={b.id}
-                          className={`flex flex-col justify-between rounded-2xl border p-5 shadow-xs ${
+                          className={`flex flex-col justify-between overflow-hidden rounded-2xl border shadow-xs ${
                             isActive
                               ? 'border-slate-200 bg-white'
                               : 'border-slate-200 bg-slate-50/85 opacity-85'
                           }`}
                         >
-                          <div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-mono-tabular text-xs font-bold text-sky-700">
-                                {b.code} · {b.city}
-                              </span>
-                              <span
-                                className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase ${
-                                  isActive
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-slate-200 text-slate-600'
-                                }`}
-                              >
-                                {b.status}
-                              </span>
-                            </div>
-                            <h3 className="mt-1 text-base font-extrabold text-slate-900">{b.name}</h3>
-                            <p className="mt-1 text-xs text-slate-600">{b.address}</p>
-                            <p className="mt-2 text-xs font-semibold text-slate-700">
-                              Manager: {b.managerName} · Phone: {b.phone} · Students:{' '}
-                              <span className="font-mono-tabular">{b.activeStudents}</span>
-                            </p>
-                          </div>
-
-                          {user.role === 'admin' && (
-                            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                              <button
-                                type="button"
-                                onClick={() => void handleToggleBranchStatus(b)}
-                                className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold ${
-                                  isActive
-                                    ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                }`}
-                              >
-                                <Power className="h-3.5 w-3.5" />
-                                <span>{isActive ? 'Deactivate' : 'Activate'}</span>
-                              </button>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => startEditBranch(b)}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                  <span>Edit</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleDeleteBranch(b)}
-                                  className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold ${
-                                    confirming
-                                      ? 'bg-rose-600 text-white'
-                                      : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                                  }`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  <span>{confirming ? 'Confirm' : 'Delete'}</span>
-                                </button>
-                              </div>
+                          {b.image && (
+                            <div className="relative h-36 w-full overflow-hidden border-b border-slate-100 bg-slate-100">
+                              <img
+                                src={b.image}
+                                alt={b.name}
+                                referrerPolicy="no-referrer"
+                                className="h-full w-full object-cover"
+                              />
                             </div>
                           )}
+                          <div className="flex flex-1 flex-col justify-between p-5">
+                            <div>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-mono-tabular text-xs font-bold text-sky-700">
+                                  {b.code} · {b.city}
+                                </span>
+                                <span
+                                  className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase ${
+                                    isActive
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-slate-200 text-slate-600'
+                                  }`}
+                                >
+                                  {b.status}
+                                </span>
+                              </div>
+                              <h3 className="mt-1 text-base font-extrabold text-slate-900">{b.name}</h3>
+                              <p className="mt-1 text-xs text-slate-600">{b.address}</p>
+                              <p className="mt-2 text-xs font-semibold text-slate-700">
+                                Manager: {b.managerName} · Phone: {b.phone} · Students:{' '}
+                                <span className="font-mono-tabular">{b.activeStudents}</span>
+                              </p>
+                            </div>
+
+                            {canEditThisBranch && (
+                              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                                {user.role === 'admin' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleToggleBranchStatus(b)}
+                                    className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold ${
+                                      isActive
+                                        ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                    }`}
+                                  >
+                                    <Power className="h-3.5 w-3.5" />
+                                    <span>{isActive ? 'Deactivate' : 'Activate'}</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[11px] font-bold text-indigo-700">
+                                    Your Assigned Campus
+                                  </span>
+                                )}
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditBranch(b)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    <span>Edit Campus &amp; Photo</span>
+                                  </button>
+                                  {user.role === 'admin' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleDeleteBranch(b)}
+                                      className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold ${
+                                        confirming
+                                          ? 'bg-rose-600 text-white'
+                                          : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                                      }`}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <span>{confirming ? 'Confirm' : 'Delete'}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -2381,15 +2541,25 @@ export function PortalPage({ navigate }: PortalPageProps) {
                   <StudentBatchPortal onNavigate={navigate} />
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <h2 className="text-lg font-extrabold text-slate-900">My Enrolled Courses</h2>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/learn')}
-                        className="rounded-xl bg-[#062436] px-4 py-2 text-xs font-bold text-white"
-                      >
-                        Continue Watching
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStorageModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                        >
+                          <FolderOpen className="h-3.5 w-3.5" />
+                          <span>My Storage ({data.metrics.mediaCount ?? 0})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/learn')}
+                          className="rounded-xl bg-[#062436] px-4 py-2 text-xs font-bold text-white"
+                        >
+                          Continue Watching
+                        </button>
+                      </div>
                     </div>
                     <div className="mt-4 space-y-3">
                       {(data.enrollments ?? []).length === 0 ? (
@@ -2499,6 +2669,85 @@ export function PortalPage({ navigate }: PortalPageProps) {
                       </div>
                     );
                   })()}
+
+                  {/* My Assignments & Homework Photo Submissions */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
+                        <ImageIcon className="h-4 w-4 text-sky-600" />
+                        <span>My Assignments &amp; Homework Submissions ({(data.assignments ?? []).length})</span>
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/learn')}
+                        className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100"
+                      >
+                        Submit Homework Photo →
+                      </button>
+                    </div>
+                    {(data.assignments ?? []).length === 0 ? (
+                      <p className="mt-3 text-xs text-slate-500">
+                        No active assignments for your enrolled courses yet.
+                      </p>
+                    ) : (
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {(data.assignments ?? []).map((asg) => {
+                          const sub = (data.assignmentSubmissions ?? []).find(
+                            (s) => s.assignmentId === asg.id
+                          );
+                          return (
+                            <div
+                              key={asg.id}
+                              className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs space-y-2"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <p className="font-extrabold text-slate-900">{asg.title}</p>
+                                  <p className="text-[11px] text-slate-500">
+                                    Due {asg.dueDate} · Max {asg.maxMarks} marks
+                                  </p>
+                                </div>
+                                <span
+                                  className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase ${
+                                    sub?.status === 'graded'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : sub
+                                        ? 'bg-sky-100 text-sky-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {sub?.status === 'graded'
+                                    ? `Graded ${sub.marks}/${asg.maxMarks}`
+                                    : sub
+                                      ? 'Submitted'
+                                      : 'Pending'}
+                                </span>
+                              </div>
+                              <p className="text-slate-600 line-clamp-2">{asg.instructions}</p>
+                              {sub?.attachmentUrl && (
+                                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2">
+                                  <img
+                                    src={sub.attachmentUrl}
+                                    alt={asg.title}
+                                    referrerPolicy="no-referrer"
+                                    className="h-10 w-14 rounded object-cover"
+                                  />
+                                  <span className="truncate text-[11px] font-semibold text-indigo-700">
+                                    Uploaded attachment saved
+                                  </span>
+                                </div>
+                              )}
+                              {sub?.feedback && (
+                                <p className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] text-emerald-900">
+                                  <strong>Teacher Feedback:</strong> {sub.feedback}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
                   {/* My Exam Scorecards & Teacher Feedback */}
                   <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
@@ -2669,81 +2918,390 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 </div>
               )}
 
-              {/* GUARDIAN CHILD MONITOR */}
+              {/* GUARDIAN CHILD MONITOR (360 PROGRESS, ATTENDANCE, HOMEWORK, EXAMS, CERTIFICATES & STUDENT LINKING) */}
               {currentSection === 'guardian_monitor' && data && (
                 <div className="space-y-6">
+                  {/* Link Student Form */}
+                  <form
+                    onSubmit={handleLinkGuardianStudent}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
+                          <Link2 className="h-4 w-4 text-indigo-600" />
+                          <span>Link Another Child / Student Account</span>
+                        </h2>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Enter a student&apos;s Roll Number (e.g. <span className="font-mono-tabular font-bold">AEC-2026-101</span>) or registered email to monitor their live progress.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setStorageModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                      >
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        <span>My Storage ({data.metrics.mediaCount ?? 0})</span>
+                      </button>
+                    </div>
+                    {guardianLinkError && (
+                      <p className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                        {guardianLinkError}
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <input
+                        type="text"
+                        value={guardianLinkInput}
+                        onChange={(e) => setGuardianLinkInput(e.target.value)}
+                        placeholder="Student Roll Number or Email (e.g. AEC-2026-101)"
+                        aria-label="Student roll number or email"
+                        className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-medium"
+                      />
+                      <button
+                        type="submit"
+                        disabled={guardianLinking}
+                        className="rounded-xl bg-[#062436] px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-60"
+                      >
+                        {guardianLinking ? 'Linking...' : 'Link Student'}
+                      </button>
+                    </div>
+                  </form>
+
                   {(data.children ?? []).length === 0 ? (
                     <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-                      No linked students found for this guardian account.
+                      No linked students found for this guardian account. Use the Roll Number / Email bar above to link your child.
                     </div>
                   ) : (
-                    (data.children ?? []).map((child) => (
-                      <div
-                        key={child.student.id}
-                        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                          <div>
-                            <h2 className="text-xl font-extrabold text-slate-900">
-                              {child.student.name}
-                            </h2>
-                            <p className="font-mono-tabular text-xs font-semibold text-sky-700">
-                              Roll: {child.student.rollNumber || child.student.id} ·{' '}
-                              {child.student.email}
-                            </p>
-                          </div>
-                          <span className="rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-                            Active Student
-                          </span>
-                        </div>
+                    (data.children ?? []).map((child) => {
+                      const attendanceList = child.attendance ?? [];
+                      const presentCount = attendanceList.filter(
+                        (a) => a.status === 'present' || a.status === 'late'
+                      ).length;
+                      const attendanceRate =
+                        attendanceList.length > 0
+                          ? Math.round((presentCount / attendanceList.length) * 100)
+                          : 100;
+                      const branchName =
+                        (data.branches ?? bootstrap?.branches ?? []).find(
+                          (b) => b.id === child.student.branchId
+                        )?.name || 'Main Campus';
+                      const childAssignments = child.assignments ?? [];
+                      const childSubmissions = child.assignmentSubmissions ?? [];
+                      const childCertificates = child.certificates ?? [];
+                      const childTransactions = child.transactions ?? [];
+                      const childOrders = child.orders ?? [];
 
-                        <h3 className="mt-5 text-sm font-extrabold text-slate-900">
-                          Course Progress & Fee Status
-                        </h3>
-                        <div className="mt-2 space-y-2.5">
-                          {child.enrollments.map((enr) => {
-                            const totalLes = child.lessonsCountByCourse[enr.courseId] || 1;
-                            const pct = calculateStudentProgress(
-                              totalLes,
-                              enr.completedLessonIds
-                            );
-                            return (
-                              <div
-                                key={enr.id}
-                                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3.5 text-xs"
-                              >
-                                <div>
-                                  <p className="font-bold text-slate-900">{enr.courseTitle}</p>
-                                  <p className="text-slate-500">
-                                    Payment: {enr.paymentMethod} · ৳{enr.amountPaid} ({enr.status})
-                                  </p>
+                      return (
+                        <div
+                          key={child.student.id}
+                          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-6"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                            <div className="flex items-center gap-3.5">
+                              {child.student.avatar ? (
+                                <img
+                                  src={child.student.avatar}
+                                  alt={child.student.name}
+                                  referrerPolicy="no-referrer"
+                                  className="h-14 w-14 rounded-2xl border border-slate-200 object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-lg font-extrabold text-indigo-700">
+                                  {child.student.name
+                                    .split(' ')
+                                    .slice(0, 2)
+                                    .map((p) => p[0])
+                                    .join('')
+                                    .toUpperCase()}
                                 </div>
-                                <span className="font-mono-tabular font-bold text-emerald-700">
-                                  {pct}% Completed
-                                </span>
+                              )}
+                              <div>
+                                <h2 className="text-xl font-extrabold text-slate-900">
+                                  {child.student.name}
+                                </h2>
+                                <p className="font-mono-tabular text-xs font-semibold text-sky-700">
+                                  Roll: {child.student.rollNumber || child.student.id} ·{' '}
+                                  {child.student.email} · {branchName}
+                                </p>
                               </div>
-                            );
-                          })}
-                        </div>
-
-                        <h3 className="mt-6 text-sm font-extrabold text-slate-900">
-                          Exam Performance History
-                        </h3>
-                        <div className="mt-2 space-y-2">
-                          {child.examAttempts.map((att) => (
-                            <div
-                              key={att.id}
-                              className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs"
-                            >
-                              <span className="font-bold text-slate-900">{att.examTitle}</span>
-                              <span className="font-mono-tabular font-bold text-indigo-700">
-                                {att.score}/{att.totalMarks} ({att.grade})
-                              </span>
                             </div>
-                          ))}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {child.rewards && (
+                                <span className="inline-flex items-center gap-1 rounded-xl bg-amber-50 px-3 py-1.5 text-xs font-extrabold text-amber-800">
+                                  <Flame className="h-3.5 w-3.5 text-orange-500" />
+                                  {child.rewards.xp} XP · {child.rewards.streakDays}d Streak
+                                </span>
+                              )}
+                              <span className="rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                                Attendance: {attendanceRate}%
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleUnlinkGuardianStudent(child.student.id, child.student.name)
+                                }
+                                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                              >
+                                Unlink
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Course Progress & Fee Status */}
+                          <div>
+                            <h3 className="text-sm font-extrabold text-slate-900">
+                              Course Progress &amp; Fee Status
+                            </h3>
+                            <div className="mt-2.5 space-y-2.5">
+                              {child.enrollments.length === 0 ? (
+                                <p className="text-xs text-slate-500">No enrollments yet.</p>
+                              ) : (
+                                child.enrollments.map((enr) => {
+                                  const totalLes = child.lessonsCountByCourse[enr.courseId] || 1;
+                                  const pct = calculateStudentProgress(
+                                    totalLes,
+                                    enr.completedLessonIds
+                                  );
+                                  return (
+                                    <div
+                                      key={enr.id}
+                                      className="rounded-xl border border-slate-200 p-3.5 text-xs space-y-2"
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                          <p className="font-bold text-slate-900">{enr.courseTitle}</p>
+                                          <p className="text-slate-500">
+                                            Payment: {enr.paymentMethod} · ৳{enr.amountPaid} ({enr.status})
+                                          </p>
+                                        </div>
+                                        <span className="font-mono-tabular font-bold text-emerald-700">
+                                          {pct}% Completed
+                                        </span>
+                                      </div>
+                                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div
+                                          className="h-full rounded-full bg-emerald-500"
+                                          style={{ width: `${pct}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Attendance Log & Assignments Grid */}
+                          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                            <div>
+                              <h3 className="text-sm font-extrabold text-slate-900">
+                                Recent Attendance Logs ({attendanceList.length})
+                              </h3>
+                              <div className="mt-2.5 space-y-2 text-xs">
+                                {attendanceList.length === 0 ? (
+                                  <p className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-slate-500">
+                                    No attendance entries recorded yet.
+                                  </p>
+                                ) : (
+                                  attendanceList.slice(0, 5).map((att) => (
+                                    <div
+                                      key={att.id}
+                                      className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2"
+                                    >
+                                      <span className="font-mono-tabular font-semibold text-slate-700">
+                                        {att.date}
+                                      </span>
+                                      <span
+                                        className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase ${
+                                          att.status === 'present'
+                                            ? 'bg-emerald-100 text-emerald-800'
+                                            : att.status === 'late'
+                                              ? 'bg-amber-100 text-amber-800'
+                                              : 'bg-rose-100 text-rose-800'
+                                        }`}
+                                      >
+                                        {att.status}
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <h3 className="text-sm font-extrabold text-slate-900">
+                                Homework &amp; Assignment Submissions ({childAssignments.length})
+                              </h3>
+                              <div className="mt-2.5 space-y-2 text-xs">
+                                {childAssignments.length === 0 ? (
+                                  <p className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-slate-500">
+                                    No assignments assigned to linked courses yet.
+                                  </p>
+                                ) : (
+                                  childAssignments.slice(0, 4).map((asg) => {
+                                    const sub = childSubmissions.find(
+                                      (s) => s.assignmentId === asg.id
+                                    );
+                                    return (
+                                      <div
+                                        key={asg.id}
+                                        className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 space-y-1.5"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="font-bold text-slate-900 truncate">
+                                            {asg.title}
+                                          </span>
+                                          <span
+                                            className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase ${
+                                              sub?.status === 'graded'
+                                                ? 'bg-emerald-100 text-emerald-800'
+                                                : sub
+                                                  ? 'bg-sky-100 text-sky-800'
+                                                  : 'bg-amber-100 text-amber-800'
+                                            }`}
+                                          >
+                                            {sub?.status === 'graded'
+                                              ? `${sub.marks}/${asg.maxMarks}`
+                                              : sub
+                                                ? 'Submitted'
+                                                : 'Due ' + asg.dueDate}
+                                          </span>
+                                        </div>
+                                        {sub?.attachmentUrl && (
+                                          <div className="flex items-center gap-2">
+                                            <img
+                                              src={sub.attachmentUrl}
+                                              alt={asg.title}
+                                              referrerPolicy="no-referrer"
+                                              className="h-9 w-12 rounded border border-slate-200 object-cover"
+                                            />
+                                            <span className="text-[11px] text-slate-600">
+                                              Homework photo uploaded
+                                            </span>
+                                          </div>
+                                        )}
+                                        {sub?.feedback && (
+                                          <p className="text-[11px] text-emerald-800">
+                                            Feedback: {sub.feedback}
+                                          </p>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Exam Performance History */}
+                          <div>
+                            <h3 className="text-sm font-extrabold text-slate-900">
+                              Exam Performance History ({child.examAttempts.length})
+                            </h3>
+                            <div className="mt-2.5 space-y-2">
+                              {child.examAttempts.length === 0 ? (
+                                <p className="text-xs text-slate-500">
+                                  No mock exams attempted yet.
+                                </p>
+                              ) : (
+                                child.examAttempts.map((att) => (
+                                  <div
+                                    key={att.id}
+                                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs space-y-1"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <span className="font-bold text-slate-900">{att.examTitle}</span>
+                                      <span className="font-mono-tabular font-bold text-indigo-700">
+                                        {att.score}/{att.totalMarks} ({att.percentage}%) · Grade {att.grade}
+                                      </span>
+                                    </div>
+                                    {att.teacherFeedback && (
+                                      <p className="text-[11px] text-amber-900">
+                                        <strong>Teacher Remark:</strong> {att.teacherFeedback}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Certificates & Fee Invoices */}
+                          {(childCertificates.length > 0 ||
+                            childTransactions.length > 0 ||
+                            childOrders.length > 0) && (
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                              {childCertificates.length > 0 && (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                                  <h4 className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-900">
+                                    <Award className="h-4 w-4 text-emerald-600" />
+                                    <span>Earned Certificates ({childCertificates.length})</span>
+                                  </h4>
+                                  <div className="mt-2 space-y-2">
+                                    {childCertificates.map((cert) => (
+                                      <div
+                                        key={cert.id}
+                                        className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-xs shadow-2xs"
+                                      >
+                                        <span className="font-bold text-slate-900">
+                                          {cert.courseTitle} ({cert.certificateNumber})
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewCert(cert)}
+                                          className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
+                                        >
+                                          View PDF
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {(childTransactions.length > 0 || childOrders.length > 0) && (
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                  <h4 className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900">
+                                    <CreditCard className="h-4 w-4 text-indigo-600" />
+                                    <span>Fee Receipts &amp; Book Orders</span>
+                                  </h4>
+                                  <div className="mt-2 space-y-1.5 text-xs">
+                                    {childTransactions.map((tx) => (
+                                      <div
+                                        key={tx.id}
+                                        className="flex items-center justify-between rounded-lg bg-white px-3 py-2"
+                                      >
+                                        <span className="font-mono-tabular font-bold text-indigo-700">
+                                          {tx.invoiceNo} ({tx.gateway})
+                                        </span>
+                                        <span className="font-mono-tabular font-bold text-slate-800">
+                                          ৳{tx.totalAmount} · {tx.status}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {childOrders.map((ord) => (
+                                      <div
+                                        key={ord.id}
+                                        className="flex items-center justify-between rounded-lg bg-white px-3 py-2"
+                                      >
+                                        <span className="font-semibold text-slate-700 truncate">
+                                          Order {ord.id}: {ord.items.map((i) => i.title).join(', ')}
+                                        </span>
+                                        <span className="font-mono-tabular font-bold text-slate-800">
+                                          ৳{ord.totalAmount} ({ord.status})
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -3017,6 +3575,12 @@ export function PortalPage({ navigate }: PortalPageProps) {
           void Promise.all([loadPortal(), refreshBootstrap()]);
           notify('SCORM 1.2 module score & XP recorded!');
         }}
+      />
+
+      <MyStorageModal
+        open={storageModalOpen}
+        onClose={() => setStorageModalOpen(false)}
+        darkMode={darkMode}
       />
     </div>
   );

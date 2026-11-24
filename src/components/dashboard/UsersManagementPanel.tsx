@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { ImageUploadField } from '../ImageUploadField';
 import {
   computeUserRoleSummary,
   filterUsersDirectory,
@@ -97,6 +98,7 @@ export function UsersManagementPanel({
   const [formRollNumber, setFormRollNumber] = useState('');
   const [formStatus, setFormStatus] = useState<'active' | 'suspended'>('active');
   const [formSpecialty, setFormSpecialty] = useState('');
+  const [formAvatar, setFormAvatar] = useState('');
   const [formBio, setFormBio] = useState('');
   const [formPassword, setFormPassword] = useState('');
   const [formLinkedStudents, setFormLinkedStudents] = useState<string[]>([]);
@@ -140,6 +142,7 @@ export function UsersManagementPanel({
     setFormRollNumber('');
     setFormStatus('active');
     setFormSpecialty('');
+    setFormAvatar('');
     setFormBio('');
     setFormPassword('');
     setFormLinkedStudents([]);
@@ -157,6 +160,7 @@ export function UsersManagementPanel({
     setFormRollNumber(u.rollNumber || '');
     setFormStatus(u.status ?? 'active');
     setFormSpecialty(u.subjectSpecialty || '');
+    setFormAvatar(u.avatar || '');
     setFormBio(u.bio || '');
     setFormPassword('');
     setFormLinkedStudents(u.guardianLinkedStudentIds ?? []);
@@ -178,6 +182,7 @@ export function UsersManagementPanel({
         status: formStatus,
         rollNumber: formRole === 'student' ? formRollNumber.trim() || undefined : undefined,
         subjectSpecialty: formSpecialty.trim() || undefined,
+        avatar: formAvatar.trim(),
         bio: formBio.trim() || undefined,
         guardianLinkedStudentIds: formRole === 'guardian' ? formLinkedStudents : undefined,
       };
@@ -418,14 +423,23 @@ export function UsersManagementPanel({
                     <tr key={u.id} className="hover:bg-slate-50/70 dark:hover:bg-white/5">
                       <td className="py-3 pr-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-extrabold text-white">
-                            {u.name
-                              .split(' ')
-                              .map((p) => p[0])
-                              .join('')
-                              .slice(0, 2)
-                              .toUpperCase()}
-                          </div>
+                          {u.avatar ? (
+                            <img
+                              src={u.avatar}
+                              alt={u.name}
+                              referrerPolicy="no-referrer"
+                              className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-blue-500/20"
+                            />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-extrabold text-white">
+                              {u.name
+                                .split(' ')
+                                .map((p) => p[0])
+                                .join('')
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </div>
+                          )}
                           <div className="min-w-0">
                             <p className="font-bold truncate">
                               {u.name} {isSelf && <span className="text-[10px] text-indigo-600">(You)</span>}
@@ -715,6 +729,16 @@ export function UsersManagementPanel({
               </div>
 
               <div className="sm:col-span-2">
+                <ImageUploadField
+                  label="Profile Photo (Upload from Device or Pick from My Storage)"
+                  value={formAvatar}
+                  onChange={setFormAvatar}
+                  category="avatar"
+                  placeholder="/uploads/... or /src/assets/images/..."
+                />
+              </div>
+
+              <div className="sm:col-span-2">
                 <label htmlFor="usr-bio" className="block text-xs font-bold text-slate-700">
                   Bio / Academic Note
                 </label>
@@ -835,25 +859,35 @@ export function UsersManagementPanel({
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 p-4 space-y-1.5">
-                  <p>
-                    <strong>Email:</strong> {inspectData.user.email} · <strong>Phone:</strong> {inspectData.user.phone}
-                  </p>
-                  <p>
-                    <strong>Role:</strong> {ROLE_LABELS[inspectData.user.role]} · <strong>Status:</strong>{' '}
-                    {inspectData.user.status ?? 'active'}
-                    {inspectData.user.rollNumber ? ` · Roll: ${inspectData.user.rollNumber}` : ''}
-                  </p>
-                  {inspectData.user.lastLoginAt && (
-                    <p>
-                      <strong>Last Login:</strong> {new Date(inspectData.user.lastLoginAt).toLocaleString()}
-                    </p>
+                <div className="flex flex-wrap items-start gap-4 rounded-xl border border-slate-200 p-4">
+                  {inspectData.user.avatar && (
+                    <img
+                      src={inspectData.user.avatar}
+                      alt={inspectData.user.name}
+                      referrerPolicy="no-referrer"
+                      className="h-14 w-14 shrink-0 rounded-2xl border border-slate-200 object-cover"
+                    />
                   )}
-                  {inspectData.user.bio && (
+                  <div className="min-w-0 flex-1 space-y-1.5">
                     <p>
-                      <strong>Bio:</strong> {inspectData.user.bio}
+                      <strong>Email:</strong> {inspectData.user.email} · <strong>Phone:</strong> {inspectData.user.phone}
                     </p>
-                  )}
+                    <p>
+                      <strong>Role:</strong> {ROLE_LABELS[inspectData.user.role]} · <strong>Status:</strong>{' '}
+                      {inspectData.user.status ?? 'active'}
+                      {inspectData.user.rollNumber ? ` · Roll: ${inspectData.user.rollNumber}` : ''}
+                    </p>
+                    {inspectData.user.lastLoginAt && (
+                      <p>
+                        <strong>Last Login:</strong> {new Date(inspectData.user.lastLoginAt).toLocaleString()}
+                      </p>
+                    )}
+                    {inspectData.user.bio && (
+                      <p>
+                        <strong>Bio:</strong> {inspectData.user.bio}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div>

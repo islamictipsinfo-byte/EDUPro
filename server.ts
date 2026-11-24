@@ -64,11 +64,13 @@ import type {
   Enrollment,
   EnrollmentAvailability,
   Exam,
+  ExamAttempt,
   ExamQuestion,
   HeroSlide,
   HomepageConfig,
   LessonType,
   LiveClassStatus,
+  MediaAsset,
   PaymentGatewayType,
   Review,
   UserRole,
@@ -991,6 +993,7 @@ async function startServer() {
           totalRevenue: revenue,
           pendingApprovals: db.enrollments.filter((e) => e.status === 'pending').length,
           totalExams: db.exams.length,
+          mediaCount: db.mediaAssets.length,
         },
         courses: db.courses,
         batches: db.batches,
@@ -1042,29 +1045,73 @@ async function startServer() {
       const branchUsers = db.users
         .filter((u) => u.branchId === myBranchId && (u.role === 'student' || u.role === 'teacher' || u.role === 'guardian'))
         .map(sanitizeUser);
+      const branchUserIds = new Set(branchUsers.map((u) => u.id));
+      const branchBatches = db.batches.filter((b) => b.branchId === myBranchId);
+      const branchBatchIds = new Set(branchBatches.map((b) => b.id));
+      const branchCourseIds = new Set([
+        ...db.courses.filter((c) => c.branchIds.includes(myBranchId)).map((c) => c.id),
+        ...branchBatches.map((b) => b.courseId),
+      ]);
+      const branchCourses = db.courses.filter((c) => branchCourseIds.has(c.id));
+      const branchLessons = db.lessons.filter(
+        (l) => branchCourseIds.has(l.courseId) || (l.batchId && branchBatchIds.has(l.batchId))
+      );
+      const branchInstructors = db.instructors.filter((ins) => ins.branchId === myBranchId);
+      const branchAttempts = db.examAttempts.filter((a) => branchUserIds.has(a.userId));
+      const branchSubmissions = db.assignmentSubmissions.filter((s) => branchUserIds.has(s.userId));
       const branchOrders = db.orders.filter((o) => o.branchPickupId === myBranchId || !o.branchPickupId);
+      const branchAttendance = db.attendance.filter((a) => !a.branchId || a.branchId === myBranchId);
+      const branchTransactions = db.transactions.filter(
+        (t) => branchUserIds.has(t.userId) || branchEnrollments.some((e) => e.invoiceNo === t.invoiceNo)
+      );
+
       return res.json({
         role: user.role,
         branch,
         metrics: {
-          branchStudents: branchUsers.filter((u) => u.role === 'student').length,
+          branchStudents: Math.max(
+            branchUsers.filter((u) => u.role === 'student').length,
+            branch?.activeStudents ?? 0
+          ),
+          branchTeachers: Math.max(
+            branchUsers.filter((u) => u.role === 'teacher').length,
+            branchInstructors.length
+          ),
+          activeBatches: branchBatches.filter((b) => b.status !== 'closed').length,
+          branchCourses: branchCourses.length,
           branchRevenue: branchEnrollments
             .filter((e) => e.status === 'approved')
             .reduce((s, e) => s + e.amountPaid, 0),
           pendingApprovals: branchEnrollments.filter((e) => e.status === 'pending').length,
           branchOrders: branchOrders.length,
+          mediaCount: db.mediaAssets.filter((m) => m.uploadedByUserId === user.id).length,
         },
         branches: branch ? [branch] : [],
         users: branchUsers,
         enrollments: branchEnrollments,
         orders: branchOrders,
-        courses: db.courses,
-        batches: db.batches.filter((b) => b.branchId === myBranchId),
-        attendance: db.attendance.filter((a) => !a.branchId || a.branchId === myBranchId),
+        courses: branchCourses.length > 0 ? branchCourses : db.courses,
+        batches: branchBatches,
+        batchWaitlists: db.batchWaitlists.filter((w) => branchBatchIds.has(w.batchId)),
+        batchTransfers: db.batchTransfers.filter(
+          (t) => (t.fromBatchId && branchBatchIds.has(t.fromBatchId)) || branchBatchIds.has(t.toBatchId)
+        ),
+        batchNotifications: db.batchNotifications.filter((n) => branchBatchIds.has(n.batchId)),
+        batchActivityLogs: db.batchActivityLogs.filter((l) => branchBatchIds.has(l.batchId)),
+        lessons: branchLessons,
+        assignments: db.assignments.filter((a) => branchCourseIds.has(a.courseId)),
+        assignmentSubmissions: branchSubmissions,
+        announcements: db.announcements.filter((a) => branchCourseIds.has(a.courseId)),
+        certificates: db.certificates.filter((c) => branchUserIds.has(c.userId)),
+        exams: db.exams,
+        examAttempts: branchAttempts,
+        instructors: branchInstructors.length > 0 ? branchInstructors : db.instructors,
+        reviews: db.reviews.filter((r) => (r.courseId ? branchCourseIds.has(r.courseId) : false)),
+        attendance: branchAttendance,
         payrolls: db.payrolls.filter((p) => !p.branchId || p.branchId === myBranchId),
         financialRecords: db.financialRecords.filter((f) => !f.branchId || f.branchId === myBranchId),
         paymentGateways: db.paymentGateways,
-        transactions: db.transactions,
+        transactions: branchTransactions.length > 0 ? branchTransactions : db.transactions,
         campaigns: db.campaigns,
       });
     }
@@ -1093,6 +1140,8 @@ async function startServer() {
           totalLessons: assignedLessons.length,
           totalExams: db.exams.length,
           submissionsGraded: db.examAttempts.length + assignedSubmissions.filter((s) => s.status === 'graded').length,
+          pendingSubmissions: assignedSubmissions.filter((s) => s.status !== 'graded').length,
+          mediaCount: db.mediaAssets.filter((m) => m.uploadedByUserId === user.id).length,
         },
         courses: assignedCourses,
         batches: assignedBatches,
@@ -1129,35 +1178,94 @@ async function startServer() {
 
     if (user.role === 'guardian') {
       const linkedIds = user.guardianLinkedStudentIds ?? [];
+      const linkedCourseIdSet = new Set<string>();
+      const linkedEnrollmentsAll: Enrollment[] = [];
+      const linkedAttemptsAll: ExamAttempt[] = [];
+      const linkedAttendanceAll: typeof db.attendance = [];
+      const linkedTransactionsAll: typeof db.transactions = [];
+
       const children = db.users
         .filter((u) => linkedIds.includes(u.id))
         .map((child) => {
           const childEnrollments = db.enrollments.filter((e) => e.userId === child.id);
           const childAttempts = db.examAttempts.filter((a) => a.userId === child.id);
+          const childAttendance = db.attendance.filter((a) => a.targetId === child.id);
+          const childCourseIds = new Set(childEnrollments.map((e) => e.courseId));
+          const childAssignments = db.assignments.filter((a) => childCourseIds.has(a.courseId));
+          const childSubmissions = db.assignmentSubmissions.filter((s) => s.userId === child.id);
+          const childCertificates = db.certificates.filter((c) => c.userId === child.id && !c.revoked);
+          const childOrders = db.orders.filter((o) => o.userId === child.id);
+          const childTransactions = db.transactions.filter((t) => t.userId === child.id);
+          const childRewards = db.rewardsByUser[child.id] ?? null;
           const childLessonsCount: Record<string, number> = {};
           for (const enr of childEnrollments) {
+            linkedCourseIdSet.add(enr.courseId);
             childLessonsCount[enr.courseId] = db.lessons.filter(
               (l) => l.courseId === enr.courseId && (l.status ?? 'published') !== 'draft'
             ).length;
           }
+          linkedEnrollmentsAll.push(...childEnrollments);
+          linkedAttemptsAll.push(...childAttempts);
+          linkedAttendanceAll.push(...childAttendance);
+          linkedTransactionsAll.push(...childTransactions);
           return {
             student: sanitizeUser(child),
             enrollments: childEnrollments,
             examAttempts: childAttempts,
             lessonsCountByCourse: childLessonsCount,
+            attendance: childAttendance,
+            assignments: childAssignments,
+            assignmentSubmissions: childSubmissions,
+            certificates: childCertificates,
+            orders: childOrders,
+            transactions: childTransactions,
+            rewards: childRewards,
           };
         });
+
+      const presentCount = linkedAttendanceAll.filter(
+        (a) => a.status === 'present' || a.status === 'late'
+      ).length;
+      const avgAttendanceRate =
+        linkedAttendanceAll.length > 0
+          ? Math.round((presentCount / linkedAttendanceAll.length) * 100)
+          : 100;
+      const avgExamScore =
+        linkedAttemptsAll.length > 0
+          ? Math.round(
+              linkedAttemptsAll.reduce((s, a) => s + a.percentage, 0) / linkedAttemptsAll.length
+            )
+          : 0;
+
+      const relevantCourses = db.courses.filter(
+        (c) => linkedCourseIdSet.has(c.id) || isCoursePubliclyListed(c)
+      );
+      const relevantLessons = db.lessons.filter(
+        (l) => linkedCourseIdSet.has(l.courseId) && (l.status ?? 'published') !== 'draft'
+      );
+
       return res.json({
         role: user.role,
         metrics: {
           linkedStudents: children.length,
-          totalExamsTaken: children.reduce((s, c) => s + c.examAttempts.length, 0),
-          activeCourses: children.reduce(
-            (s, c) => s + c.enrollments.filter((e) => e.status === 'approved').length,
-            0
-          ),
+          totalExamsTaken: linkedAttemptsAll.length,
+          activeCourses: linkedEnrollmentsAll.filter((e) => e.status === 'approved').length,
+          avgAttendanceRate,
+          avgExamScore,
+          mediaCount: db.mediaAssets.filter((m) => m.uploadedByUserId === user.id).length,
         },
         children,
+        branches: db.branches,
+        instructors: db.instructors,
+        courses: relevantCourses,
+        batches: db.batches.map((b) =>
+          redactBatchForViewer(b, user, linkedEnrollmentsAll, db.instructors)
+        ),
+        lessons: relevantLessons,
+        enrollments: linkedEnrollmentsAll,
+        examAttempts: linkedAttemptsAll,
+        attendance: linkedAttendanceAll,
+        transactions: linkedTransactionsAll,
       });
     }
 
@@ -1175,6 +1283,7 @@ async function startServer() {
         pendingCourses: myEnrollments.filter((e) => e.status === 'pending').length,
         examsTaken: myAttempts.length,
         ordersPlaced: myOrders.length,
+        mediaCount: db.mediaAssets.filter((m) => m.uploadedByUserId === user.id).length,
       },
       enrollments: myEnrollments,
       examAttempts: myAttempts,
@@ -1199,8 +1308,78 @@ async function startServer() {
       scormAttempts: db.scormAttempts.filter((a) => a.userId === user.id),
       rewards: db.rewardsByUser[user.id] ?? null,
       transactions: db.transactions.filter((t) => t.userId === user.id),
+      branches: db.branches,
+      instructors: db.instructors,
     });
   });
+
+  // Guardian: Self-service link / unlink student by Roll Number or Email
+  app.post(
+    '/api/portal/guardian/link-student',
+    requireAuth,
+    requireRole(['guardian', 'admin']),
+    (req: AuthedRequest, res) => {
+      const db = getDb();
+      const actor = db.users.find((u) => u.id === req.authUser!.id);
+      if (!actor) {
+        res.status(404).json({ error: 'Account not found.' });
+        return;
+      }
+      const query = String(req.body?.query ?? req.body?.identifier ?? req.body?.rollNumber ?? '')
+        .trim()
+        .toLowerCase();
+      if (!query) {
+        res.status(400).json({ error: 'Enter a student Roll Number or Email address.' });
+        return;
+      }
+      const targetStudent = db.users.find(
+        (u) =>
+          u.role === 'student' &&
+          ((u.rollNumber ?? '').toLowerCase() === query || u.email.toLowerCase() === query)
+      );
+      if (!targetStudent) {
+        res.status(404).json({ error: `No student found matching "${query.toUpperCase()}".` });
+        return;
+      }
+      const existing = actor.guardianLinkedStudentIds ?? [];
+      if (!existing.includes(targetStudent.id)) {
+        actor.guardianLinkedStudentIds = [...existing, targetStudent.id];
+        recordAuditLog(
+          db,
+          actor,
+          'GUARDIAN_LINK_STUDENT',
+          targetStudent.name,
+          `Linked student ${targetStudent.rollNumber || targetStudent.email}`
+        );
+        saveDb(db);
+      }
+      res.status(200).json({
+        student: sanitizeUser(targetStudent),
+        linkedStudentIds: actor.guardianLinkedStudentIds ?? [],
+      });
+    }
+  );
+
+  app.delete(
+    '/api/portal/guardian/link-student/:studentId',
+    requireAuth,
+    requireRole(['guardian', 'admin']),
+    (req: AuthedRequest, res) => {
+      const db = getDb();
+      const actor = db.users.find((u) => u.id === req.authUser!.id);
+      if (!actor) {
+        res.status(404).json({ error: 'Account not found.' });
+        return;
+      }
+      const studentId = String(req.params.studentId ?? '');
+      actor.guardianLinkedStudentIds = (actor.guardianLinkedStudentIds ?? []).filter(
+        (id) => id !== studentId
+      );
+      recordAuditLog(db, actor, 'GUARDIAN_UNLINK_STUDENT', studentId, 'Removed linked student');
+      saveDb(db);
+      res.json({ linkedStudentIds: actor.guardianLinkedStudentIds ?? [] });
+    }
+  );
 
   const ALLOWED_COURSE_STATUSES: CourseStatus[] = [
     'draft',
@@ -2494,6 +2673,7 @@ async function startServer() {
     const phone = String(req.body?.phone ?? '').trim();
     const managerName = String(req.body?.managerName ?? '').trim();
     const status = req.body?.status === 'inactive' ? 'inactive' : 'active';
+    const image = sanitizeSafeUrl(String(req.body?.image ?? ''), '');
 
     if (!name || !code || !city || !address) {
       res.status(400).json({ error: 'Branch name, code, city, and address are required' });
@@ -2515,6 +2695,7 @@ async function startServer() {
       managerName: managerName || 'Branch Coordinator',
       activeStudents: Math.max(0, Number(req.body?.activeStudents) || 0),
       status,
+      image: image || undefined,
     };
     db.branches.push(branch);
     recordAuditLog(db, req.authUser!, 'BRANCH_CREATE', branch.name, `${branch.code} (${branch.city})`);
@@ -2522,16 +2703,24 @@ async function startServer() {
     res.status(201).json({ branch });
   });
 
-  // Admin: Update / Edit Branch
-  app.put('/api/portal/branches/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
+  // Admin & Branch Manager (own branch): Update / Edit Branch
+  app.put('/api/portal/branches/:id', requireAuth, requireRole(['admin', 'branch_manager']), (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
     const db = getDb();
     const branch = db.branches.find((b) => b.id === req.params.id);
     if (!branch) {
       res.status(404).json({ error: 'Branch not found' });
       return;
     }
+    if (actor.role === 'branch_manager' && actor.branchId !== branch.id) {
+      res.status(403).json({ error: 'Branch managers can only update their assigned campus.' });
+      return;
+    }
     const name = String(req.body?.name ?? branch.name).trim();
-    const code = String(req.body?.code ?? branch.code).trim().toUpperCase();
+    const code =
+      actor.role === 'admin'
+        ? String(req.body?.code ?? branch.code).trim().toUpperCase()
+        : branch.code;
     const city = String(req.body?.city ?? branch.city).trim();
     const address = String(req.body?.address ?? branch.address).trim();
     const phone = String(req.body?.phone ?? branch.phone).trim();
@@ -2550,15 +2739,19 @@ async function startServer() {
     branch.address = address;
     branch.phone = phone || branch.phone;
     branch.managerName = managerName || branch.managerName;
+    if (req.body?.image !== undefined) {
+      const cleaned = sanitizeSafeUrl(String(req.body.image ?? ''), '');
+      branch.image = cleaned || undefined;
+    }
     if (req.body?.activeStudents !== undefined) {
       branch.activeStudents = Math.max(0, Number(req.body.activeStudents) || 0);
     }
-    if (req.body?.status === 'active' || req.body?.status === 'inactive') {
+    if (actor.role === 'admin' && (req.body?.status === 'active' || req.body?.status === 'inactive')) {
       branch.status = req.body.status;
     }
-    recordAuditLog(db, req.authUser!, 'BRANCH_UPDATE', branch.name, `${branch.code} (${branch.status})`);
+    recordAuditLog(db, actor, 'BRANCH_UPDATE', branch.name, `${branch.code} (${branch.status})`);
     saveDb(db);
-    res.json({ branch, branches: db.branches });
+    res.json({ branch, branches: actor.role === 'admin' ? db.branches : [branch] });
   });
 
   // Admin: Toggle Branch Active / Inactive Status
@@ -3085,6 +3278,7 @@ async function startServer() {
     }
 
     const customRoll = String(req.body?.rollNumber ?? '').trim();
+    const avatar = req.body?.avatar ? sanitizeSafeUrl(String(req.body.avatar), '') : '';
     const newUser: StoredUser = {
       id: `u-${Date.now()}`,
       name,
@@ -3093,6 +3287,7 @@ async function startServer() {
       role,
       branchId,
       status,
+      avatar: avatar || undefined,
       bio,
       subjectSpecialty,
       rollNumber: role === 'student' ? customRoll || `AEC-2026-${100 + db.users.length + 1}` : undefined,
@@ -3165,6 +3360,10 @@ async function startServer() {
     }
     if (req.body?.bio !== undefined) {
       target.bio = String(req.body.bio).trim().slice(0, 300) || undefined;
+    }
+    if (req.body?.avatar !== undefined) {
+      const cleanedAvatar = sanitizeSafeUrl(String(req.body.avatar ?? ''), '');
+      target.avatar = cleanedAvatar || undefined;
     }
     if (req.body?.subjectSpecialty !== undefined) {
       target.subjectSpecialty = String(req.body.subjectSpecialty).trim().slice(0, 120) || undefined;
@@ -3447,29 +3646,77 @@ async function startServer() {
     res.json({ deletedId: removed.id, reviews: db.reviews });
   });
 
-  // Admin & Faculty: Custom Banner Image Upload & Media Library
-  app.get('/api/portal/uploads', requireAuth, requireRole(['admin', 'teacher', 'branch_manager']), (_req, res) => {
-    if (!fs.existsSync(uploadsDir)) {
-      res.json({ files: [] });
-      return;
-    }
-    const entries = fs
+  // Universal Device Picture Upload & "My Storage" Library (All Authenticated Roles)
+  const syncUploadsWithDb = () => {
+    const db = getDb();
+    if (!fs.existsSync(uploadsDir)) return db;
+    const diskNames = fs
       .readdirSync(uploadsDir)
-      .filter((name) => /^cms-\d+-[a-f0-9]{8}\.(png|jpg|webp|gif)$/.test(name))
-      .map((name) => {
+      .filter((name) => /^cms-\d+-[a-f0-9]{8}\.(png|jpg|webp|gif)$/.test(name));
+    const diskSet = new Set(diskNames);
+    const knownSet = new Set(db.mediaAssets.map((a) => a.filename));
+    let dirty = false;
+
+    for (const name of diskNames) {
+      if (!knownSet.has(name)) {
         const stat = fs.statSync(path.join(uploadsDir, name));
-        return {
-          name,
-          url: `/uploads/${name}`,
-          sizeBytes: stat.size,
-          createdAt: stat.mtime.toISOString(),
+        const ext = path.extname(name).slice(1).toLowerCase();
+        const mimeMap: Record<string, MediaAsset['mimeType']> = {
+          png: 'image/png',
+          jpg: 'image/jpeg',
+          webp: 'image/webp',
+          gif: 'image/gif',
         };
+        db.mediaAssets.push({
+          id: `media-${name}`,
+          filename: name,
+          url: `/uploads/${name}`,
+          originalName: name,
+          mimeType: mimeMap[ext] ?? 'image/png',
+          sizeBytes: stat.size,
+          uploadedByUserId: 'u-admin',
+          uploadedByName: 'System Library',
+          uploadedByRole: 'admin',
+          category: 'cms',
+          createdAt: stat.mtime.toISOString(),
+        });
+        dirty = true;
+      }
+    }
+
+    const beforeLen = db.mediaAssets.length;
+    db.mediaAssets = db.mediaAssets.filter((a) => diskSet.has(a.filename));
+    if (db.mediaAssets.length !== beforeLen) dirty = true;
+    if (dirty) saveDb(db);
+    return db;
+  };
+
+  app.get('/api/portal/uploads', requireAuth, (req: AuthedRequest, res) => {
+    const db = syncUploadsWithDb();
+    const actor = req.authUser!;
+    const scoped = db.mediaAssets
+      .filter((asset) => {
+        if (actor.role === 'admin') return true;
+        if (actor.role === 'branch_manager' || actor.role === 'teacher') {
+          return (
+            asset.uploadedByUserId === actor.id ||
+            asset.uploadedByRole === 'admin' ||
+            asset.uploadedByRole === 'teacher' ||
+            asset.uploadedByRole === 'branch_manager'
+          );
+        }
+        return asset.uploadedByUserId === actor.id;
       })
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    res.json({ files: entries });
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .map((asset) => ({
+        ...asset,
+        name: asset.filename,
+      }));
+    res.json({ files: scoped });
   });
 
-  app.post('/api/portal/upload-image', requireAuth, requireRole(['admin', 'teacher', 'branch_manager']), (req, res) => {
+  app.post('/api/portal/upload-image', requireAuth, (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
     const rawDataUrl = typeof req.body?.dataUrl === 'string' ? req.body.dataUrl : '';
     const parsed = parseImageUploadDataUrl(rawDataUrl, 5 * 1024 * 1024);
     if (!parsed.ok) {
@@ -3491,28 +3738,79 @@ async function startServer() {
 
     fs.mkdirSync(uploadsDir, { recursive: true });
     const filename = `cms-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${parsed.value.extension}`;
-    const targetPath = path.join(uploadsDir, filename);
+    const targetPath = path.resolve(uploadsDir, filename);
+    if (!targetPath.startsWith(uploadsDir + path.sep)) {
+      res.status(400).json({ error: 'Invalid upload destination path.' });
+      return;
+    }
     fs.writeFileSync(targetPath, buffer);
 
-    res.status(201).json({
+    const rawName = String(req.body?.originalName ?? filename)
+      .replace(/[/\\?%*:|"<>]/g, '_')
+      .trim()
+      .slice(0, 100);
+    const allowedCats = ['avatar', 'branch', 'course', 'assignment', 'community', 'cms', 'general'];
+    const rawCat = String(req.body?.category ?? 'general').trim().toLowerCase();
+    const category = allowedCats.includes(rawCat) ? rawCat : 'general';
+
+    const db = getDb();
+    const asset: MediaAsset = {
+      id: `media-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
+      filename,
       url: `/uploads/${filename}`,
+      originalName: rawName || filename,
+      mimeType: parsed.value.mimeType,
+      sizeBytes: buffer.length,
+      uploadedByUserId: actor.id,
+      uploadedByName: actor.name,
+      uploadedByRole: actor.role,
+      category,
+      createdAt: new Date().toISOString(),
+    };
+    db.mediaAssets.unshift(asset);
+    recordAuditLog(db, actor, 'MEDIA_UPLOAD', asset.originalName, `${category} · ${Math.round(buffer.length / 1024)} KB`);
+    saveDb(db);
+
+    res.status(201).json({
+      url: asset.url,
       name: filename,
       sizeBytes: buffer.length,
+      asset: { ...asset, name: filename },
     });
   });
 
-  app.delete('/api/portal/uploads/:filename', requireAuth, requireRole(['admin']), (req, res) => {
+  app.delete('/api/portal/uploads/:filename', requireAuth, (req: AuthedRequest, res) => {
+    const actor = req.authUser!;
     const filename = String(req.params.filename ?? '');
     if (!/^cms-\d+-[a-f0-9]{8}\.(png|jpg|webp|gif)$/.test(filename)) {
       res.status(400).json({ error: 'Invalid upload filename.' });
       return;
     }
-    const targetPath = path.join(uploadsDir, filename);
-    if (!fs.existsSync(targetPath)) {
+    const targetPath = path.resolve(uploadsDir, filename);
+    if (!targetPath.startsWith(uploadsDir + path.sep)) {
+      res.status(400).json({ error: 'Invalid file path.' });
+      return;
+    }
+
+    const db = getDb();
+    const assetIdx = db.mediaAssets.findIndex((a) => a.filename === filename);
+    const asset = assetIdx >= 0 ? db.mediaAssets[assetIdx] : null;
+    if (actor.role !== 'admin' && (!asset || asset.uploadedByUserId !== actor.id)) {
+      res.status(403).json({ error: 'You can only delete images from your own storage.' });
+      return;
+    }
+    if (!fs.existsSync(targetPath) && !asset) {
       res.status(404).json({ error: 'Uploaded file not found.' });
       return;
     }
-    fs.unlinkSync(targetPath);
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+    }
+    if (assetIdx >= 0) {
+      db.mediaAssets.splice(assetIdx, 1);
+    }
+    recordAuditLog(db, actor, 'MEDIA_DELETE', filename, 'Removed from storage');
+    saveDb(db);
     res.json({ deletedName: filename });
   });
 

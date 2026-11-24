@@ -1154,7 +1154,11 @@ export function createPlatformRouter(
     res.json({ deletedId: removed.id, categories: db.categories });
   });
 
-  router.post('/api/portal/posts', requireAuth, requireRole(['admin', 'teacher', 'student']), (req: AuthedRequest, res) => {
+  router.post(
+    '/api/portal/posts',
+    requireAuth,
+    requireRole(['admin', 'teacher', 'student', 'guardian', 'branch_manager']),
+    (req: AuthedRequest, res) => {
     const { title, category, content, image, status } = req.body ?? {};
     if (!String(title ?? '').trim() || !String(content ?? '').trim()) {
       res.status(400).json({ error: 'Post title and content are required.' });
