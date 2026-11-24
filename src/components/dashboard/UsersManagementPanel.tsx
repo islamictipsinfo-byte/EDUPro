@@ -43,8 +43,7 @@ interface UsersManagementPanelProps {
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Admin',
-  branch_manager: 'Branch Manager',
+  admin: 'Main Admin',
   teacher: 'Teacher',
   student: 'Student',
   guardian: 'Guardian',
@@ -52,7 +51,6 @@ const ROLE_LABELS: Record<UserRole, string> = {
 
 const ROLE_BADGE_COLORS: Record<UserRole, string> = {
   admin: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-  branch_manager: 'bg-sky-100 text-sky-800 border-sky-200',
   teacher: 'bg-emerald-100 text-emerald-800 border-emerald-200',
   student: 'bg-blue-50 text-blue-700 border-blue-200',
   guardian: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -78,7 +76,6 @@ export function UsersManagementPanel({
 }: UsersManagementPanelProps) {
   const { apiFetch } = useAuth();
   const isAdmin = currentUser.role === 'admin';
-  const isManager = currentUser.role === 'branch_manager';
 
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [branchFilter, setBranchFilter] = useState<string>('all');
@@ -186,9 +183,14 @@ export function UsersManagementPanel({
         bio: formBio.trim() || undefined,
         guardianLinkedStudentIds: formRole === 'guardian' ? formLinkedStudents : undefined,
       };
+      if (!editingUser && !formPassword.trim()) {
+        setFormError('Strong initial password (min 8 chars, letters and numbers) is required.');
+        setSaving(false);
+        return;
+      }
       if (formPassword.trim()) {
-        if (formPassword.trim().length < 6) {
-          setFormError('Password must be at least 6 characters.');
+        if (formPassword.trim().length < 8) {
+          setFormError('Password must be at least 8 characters.');
           setSaving(false);
           return;
         }
@@ -277,14 +279,13 @@ export function UsersManagementPanel({
   return (
     <div className="space-y-6">
       {/* Role Summary Strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {[
           { key: 'all' as const, label: 'All Users', count: summary.total, tone: 'bg-slate-900 text-white' },
           { key: 'student' as const, label: 'Students', count: summary.student, tone: 'bg-blue-50 text-blue-800 border-blue-200' },
           { key: 'teacher' as const, label: 'Teachers', count: summary.teacher, tone: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-          { key: 'branch_manager' as const, label: 'Managers', count: summary.branch_manager, tone: 'bg-sky-50 text-sky-800 border-sky-200' },
           { key: 'guardian' as const, label: 'Guardians', count: summary.guardian, tone: 'bg-amber-50 text-amber-800 border-amber-200' },
-          { key: 'admin' as const, label: 'Admins', count: summary.admin, tone: 'bg-indigo-50 text-indigo-800 border-indigo-200' },
+          { key: 'admin' as const, label: 'Main Admin', count: summary.admin, tone: 'bg-indigo-50 text-indigo-800 border-indigo-200' },
         ].map((item) => (
           <button
             key={item.key}
@@ -365,9 +366,8 @@ export function UsersManagementPanel({
             <option value="all">All Roles</option>
             <option value="student">Students</option>
             <option value="teacher">Teachers</option>
-            <option value="branch_manager">Branch Managers</option>
             <option value="guardian">Guardians</option>
-            <option value="admin">Admins</option>
+            <option value="admin">Main Admin</option>
           </select>
           <select
             value={branchFilter}
@@ -415,8 +415,7 @@ export function UsersManagementPanel({
                 {filteredUsers.map((u) => {
                   const status = u.status ?? 'active';
                   const isSelf = u.id === currentUser.id;
-                  const canEditTarget =
-                    isAdmin || (isManager && u.role !== 'admin' && u.role !== 'branch_manager');
+                  const canEditTarget = isAdmin;
                   const confirming = confirmDeleteId === u.id;
 
                   return (
@@ -638,8 +637,6 @@ export function UsersManagementPanel({
                   <option value="student">Student</option>
                   <option value="teacher">Teacher</option>
                   <option value="guardian">Guardian</option>
-                  {isAdmin && <option value="branch_manager">Branch Manager</option>}
-                  {isAdmin && <option value="admin">Admin</option>}
                 </select>
               </div>
               <div>
@@ -715,15 +712,17 @@ export function UsersManagementPanel({
                   <span>
                     {editingUser
                       ? 'Reset Password (leave blank to keep current password)'
-                      : 'Initial Password (defaults to Aloms@2026 if blank)'}
+                      : 'Initial Strong Password (min 8 chars, letters + numbers) *'}
                   </span>
                 </label>
                 <input
                   id="usr-password"
                   type="password"
+                  required={!editingUser}
+                  minLength={editingUser ? undefined : 8}
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
-                  placeholder={editingUser ? 'Enter new password (min 6 chars)' : 'Aloms@2026'}
+                  placeholder={editingUser ? 'Enter new strong password (optional)' : 'Minimum 8 chars with letters & numbers'}
                   className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>

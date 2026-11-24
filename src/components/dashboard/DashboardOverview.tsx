@@ -108,12 +108,6 @@ export function DashboardOverview({
       onSelectSection('guardian_monitor');
       return;
     }
-    if (data.role === 'branch_manager') {
-      if (id === 'students' || id === 'courses') onSelectSection('enrollments');
-      else if (id === 'teachers') onSelectSection('users');
-      else onSelectSection('courses', 'batches');
-      return;
-    }
     if (id === 'students') {
       onSelectSection('enrollments');
     } else if (id === 'teachers') {
@@ -128,35 +122,28 @@ export function DashboardOverview({
   const heroSubtitle =
     data.role === 'student'
       ? `Student Learning Hub${viewerRollNumber ? ` · Roll ${viewerRollNumber}` : ''}`
-      : data.role === 'branch_manager'
-        ? `${data.branch?.name || 'Campus'} (${data.branch?.code || 'BRANCH'}) · ${data.branch?.city || 'Operations'}`
-        : data.role === 'guardian'
-          ? `Guardian Academic Watch · ${(data.children ?? []).length} Linked Student(s)`
-          : data.role === 'teacher'
-            ? `Faculty Coaching Studio · ${(data.courses ?? []).length} Assigned Course(s)`
-            : cfg.heroSubtitle;
+      : data.role === 'guardian'
+        ? `Guardian Academic Watch · ${(data.children ?? []).length} Linked Student(s)`
+        : data.role === 'teacher'
+          ? `Faculty Coaching Studio · ${(data.courses ?? []).length} Assigned Course(s)`
+          : cfg.heroSubtitle;
 
   const heroAvatarSrc = viewerAvatar?.trim() || cfg.images.heroAvatarUrl;
-  const heroBgSrc =
-    (data.role === 'branch_manager' && data.branch?.image?.trim()) || cfg.images.heroBannerBgUrl;
+  const heroBgSrc = cfg.images.heroBannerBgUrl;
 
   const progressCardTitle =
     data.role === 'student'
       ? 'My Course Progress'
       : data.role === 'guardian'
         ? 'Children Course Progress'
-        : data.role === 'branch_manager'
-          ? 'Branch Completion Rate'
-          : 'Course Progress';
+        : 'Course Progress';
 
   const topListTitle =
     data.role === 'student'
       ? 'My Enrolled Courses'
       : data.role === 'guardian'
         ? 'Linked Children'
-        : data.role === 'branch_manager'
-          ? 'Campus Top Students'
-          : 'Top Students';
+        : 'Top Students';
 
   const topListEmptyText =
     data.role === 'student'
@@ -225,9 +212,7 @@ export function DashboardOverview({
                             ? 'my_learning'
                             : data.role === 'guardian'
                               ? 'guardian_monitor'
-                              : data.role === 'branch_manager'
-                                ? 'enrollments'
-                                : cfg.heroCtaSection
+                              : cfg.heroCtaSection
                       )
                     }
                     style={{
@@ -243,9 +228,7 @@ export function DashboardOverview({
                           ? 'Open My Learning'
                           : data.role === 'guardian'
                             ? 'Child 360° Monitor'
-                            : data.role === 'branch_manager'
-                              ? 'Manage Branch Enrollments'
-                              : cfg.heroCtaLabel}
+                            : cfg.heroCtaLabel}
                     </span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
@@ -402,63 +385,7 @@ export function DashboardOverview({
         </div>
       )}
 
-      {data.role === 'branch_manager' && data.branch && (
-        <div
-          className={`flex flex-col justify-between gap-4 rounded-2xl border p-4 shadow-sm sm:flex-row sm:items-center ${
-            darkMode
-              ? 'border-[#1E2E52] bg-[#0F1B3B] text-white'
-              : 'border-white/80 bg-white/90 text-slate-900 backdrop-blur-md'
-          }`}
-        >
-          <div className="flex items-center gap-3.5">
-            {data.branch.image ? (
-              <img
-                src={data.branch.image}
-                alt={data.branch.name}
-                referrerPolicy="no-referrer"
-                className="h-16 w-24 shrink-0 rounded-xl border border-slate-200 object-cover"
-              />
-            ) : (
-              <div className="flex h-16 w-20 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600">
-                <Building2 className="h-7 w-7" />
-              </div>
-            )}
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono-tabular rounded bg-sky-500/15 px-2 py-0.5 text-[10px] font-extrabold text-sky-700 dark:text-sky-300">
-                  {data.branch.code}
-                </span>
-                <span className="text-sm font-extrabold">{data.branch.name}</span>
-              </div>
-              <p className="mt-1 flex flex-wrap items-center gap-3 text-xs opacity-75">
-                <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5" /> {data.branch.address}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Phone className="h-3.5 w-3.5" /> {data.branch.phone}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onSelectSection('branches')}
-              className="rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100"
-            >
-              Edit Campus &amp; Photo
-            </button>
-            <button
-              type="button"
-              onClick={() => onSelectSection('enrollments')}
-              className="rounded-xl bg-[#062436] px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-600"
-            >
-              Pending Approvals ({data.metrics.pendingApprovals ?? 0})
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Legacy branch manager banner removed; branch administration lives in Main Admin Branch Operations */}
 
       {data.role === 'guardian' && (
         <div
@@ -680,9 +607,7 @@ export function DashboardOverview({
                       ? 'my_learning'
                       : data.role === 'guardian'
                         ? 'guardian_monitor'
-                        : data.role === 'branch_manager'
-                          ? 'courses'
-                          : 'lessons'
+                        : 'lessons'
                   )
                 }
               />

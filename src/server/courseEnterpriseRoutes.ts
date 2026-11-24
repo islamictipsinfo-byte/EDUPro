@@ -27,6 +27,7 @@ import type {
   UserRole,
 } from '../types';
 import { getDb, recordAuditLog, saveDb, type StoredUser } from './store';
+import { assertBranchOperationalForTransactions } from './paymentService';
 
 interface AuthedRequest extends Request {
   authUser?: StoredUser;
@@ -48,7 +49,7 @@ export function createCourseEnterpriseRouter(
   router.get(
     '/api/portal/courses/analytics',
     requireAuth,
-    requireRole(['admin', 'teacher', 'branch_manager']),
+    requireRole(['admin', 'teacher']),
     (req: AuthedRequest, res) => {
       const db = getDb();
       const actor = req.authUser!;
@@ -107,7 +108,7 @@ export function createCourseEnterpriseRouter(
   router.get(
     '/api/portal/courses/export-csv',
     requireAuth,
-    requireRole(['admin', 'teacher', 'branch_manager']),
+    requireRole(['admin', 'teacher']),
     (req: AuthedRequest, res) => {
       const db = getDb();
       const actor = req.authUser!;
@@ -565,17 +566,13 @@ export function createCourseEnterpriseRouter(
   router.post(
     '/api/portal/enrollments/:id/transfer',
     requireAuth,
-    requireRole(['admin', 'branch_manager']),
+    requireRole(['admin']),
     (req: AuthedRequest, res) => {
       const db = getDb();
       const actor = req.authUser!;
       const enrollment = db.enrollments.find((e) => e.id === req.params.id);
       if (!enrollment) {
         res.status(404).json({ error: 'Enrollment not found.' });
-        return;
-      }
-      if (actor.role === 'branch_manager' && actor.branchId && enrollment.branchId !== actor.branchId) {
-        res.status(403).json({ error: 'Branch managers can only transfer enrollments in their own branch.' });
         return;
       }
 
@@ -648,15 +645,21 @@ export function createCourseEnterpriseRouter(
         createdAt: new Date().toISOString(),
       };
 
+      const nextBranchId = req.body?.targetBranchId
+        ? String(req.body.targetBranchId)
+        : targetBatch
+          ? targetBatch.branchId
+          : enrollment.branchId;
+      const branchCheck = assertBranchOperationalForTransactions(nextBranchId);
+      if (!branchCheck.ok) {
+        res.status(403).json({ error: branchCheck.error });
+        return;
+      }
       enrollment.courseId = targetCourse.id;
       enrollment.courseTitle = targetCourse.title;
       enrollment.batchId = targetBatch ? targetBatch.id : null;
       enrollment.batchName = targetBatch ? targetBatch.name : undefined;
-      if (req.body?.targetBranchId && actor.role === 'admin') {
-        enrollment.branchId = String(req.body.targetBranchId);
-      } else if (targetBatch) {
-        enrollment.branchId = targetBatch.branchId;
-      }
+      enrollment.branchId = nextBranchId;
       enrollment.history = [histEntry, ...(enrollment.history ?? [])];
 
       recordAuditLog(
@@ -674,17 +677,13 @@ export function createCourseEnterpriseRouter(
   router.post(
     '/api/portal/enrollments/:id/cancel-refund',
     requireAuth,
-    requireRole(['admin', 'branch_manager']),
+    requireRole(['admin']),
     (req: AuthedRequest, res) => {
       const db = getDb();
       const actor = req.authUser!;
       const enrollment = db.enrollments.find((e) => e.id === req.params.id);
       if (!enrollment) {
         res.status(404).json({ error: 'Enrollment not found.' });
-        return;
-      }
-      if (actor.role === 'branch_manager' && actor.branchId && enrollment.branchId !== actor.branchId) {
-        res.status(403).json({ error: 'Branch managers can only manage enrollments in their own branch.' });
         return;
       }
       if (enrollment.status === 'cancelled') {
@@ -756,7 +755,7 @@ export function createCourseEnterpriseRouter(
   router.patch(
     '/api/portal/enrollments/:id/expiry',
     requireAuth,
-    requireRole(['admin', 'branch_manager']),
+    requireRole(['admin']),
     (req: AuthedRequest, res) => {
       const db = getDb();
       const actor = req.authUser!;

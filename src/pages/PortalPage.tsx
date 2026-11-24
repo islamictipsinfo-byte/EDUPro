@@ -30,8 +30,8 @@ import {
   Package,
   Pencil,
   Play,
+  Plug,
   Plus,
-  Power,
   Radio,
   Search,
   Settings,
@@ -54,6 +54,7 @@ import { CertificateModal } from '../components/courses/CertificateModal';
 import { CourseEnterpriseDashboard } from '../components/courses/CourseEnterpriseDashboard';
 import { CourseWizardModal } from '../components/courses/CourseWizardModal';
 import { CurriculumBuilderModal } from '../components/courses/CurriculumBuilderModal';
+import { BranchOperationsPanel } from '../components/dashboard/BranchOperationsPanel';
 import { DashboardCustomizerModal } from '../components/dashboard/DashboardCustomizerModal';
 import { DashboardOverview } from '../components/dashboard/DashboardOverview';
 import {
@@ -64,6 +65,11 @@ import {
 import { DashboardTopbar } from '../components/dashboard/DashboardTopbar';
 import { type QuickActionType } from '../components/dashboard/DashboardWidgets';
 import { EnrollmentsFeePanel } from '../components/dashboard/EnrollmentsFeePanel';
+import {
+  AcademicOpsPanel,
+  FeeInvoicesWidget,
+  IntegrationsAndSecurityPanel,
+} from '../components/dashboard/EnterpriseOpsPanels';
 import { SystemActivityLogsPanel } from '../components/dashboard/SystemActivityLogsPanel';
 import {
   ExamSubmissionsModal,
@@ -72,7 +78,6 @@ import {
 import { UserProfilePanel } from '../components/dashboard/UserProfilePanel';
 import { UsersManagementPanel } from '../components/dashboard/UsersManagementPanel';
 import { HomepageCmsStudio } from '../components/HomepageCmsStudio';
-import { ImageUploadField } from '../components/ImageUploadField';
 import { MyStorageModal } from '../components/MyStorageModal';
 import { PaymentSystemPanel } from '../components/PaymentSystemPanel';
 import {
@@ -208,6 +213,8 @@ const SECTION_META: Record<PortalSection, { label: string; icon: typeof LayoutDa
   attendance_finance: { label: 'Attendance, Payroll & P&L', icon: Wallet },
   enrollments: { label: 'Enrollments & Fees', icon: UserCheck },
   branches: { label: 'Branches', icon: Building2 },
+  academic_ops: { label: 'Academic Ops', icon: BookOpen },
+  integrations: { label: 'Integrations & 2FA', icon: Plug },
   users: { label: 'Users & Roles', icon: Users },
   orders: { label: 'Shop Orders', icon: Package },
   ai_ecosystem: { label: 'AI, SCORM & Security', icon: Bot },
@@ -219,23 +226,14 @@ const SECTION_META: Record<PortalSection, { label: string; icon: typeof LayoutDa
 };
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Admin',
-  branch_manager: 'Branch Manager',
+  admin: 'Main Admin',
   teacher: 'Instructor',
   student: 'Student',
   guardian: 'Guardian',
 };
 
-const QUICK_DEMO_ACCOUNTS: { role: string; email: string; desc: string }[] = [
-  { role: 'Admin', email: 'admin@alomsenglish.com', desc: 'Full LMS & CMS Console' },
-  { role: 'Branch Manager', email: 'manager@alomsenglish.com', desc: 'Campus & Fee Ops' },
-  { role: 'Teacher', email: 'teacher@alomsenglish.com', desc: 'Classes, Exams & Live' },
-  { role: 'Student', email: 'student@alomsenglish.com', desc: 'Courses, SCORM & XP' },
-  { role: 'Guardian', email: 'guardian@alomsenglish.com', desc: 'Child Progress Monitor' },
-];
-
 export function PortalPage({ navigate }: PortalPageProps) {
-  const { user, bootstrap, login, logout, apiFetch, refreshBootstrap } = useAuth();
+  const { user, bootstrap, logout, apiFetch, refreshBootstrap } = useAuth();
   const [data, setData] = useState<PortalPayload | null>(null);
   const [activeSection, setActiveSection] = useState<PortalSection>('overview');
   const [activeSidebarIntent, setActiveSidebarIntent] = useState<SidebarSubIntent>(undefined);
@@ -251,7 +249,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dashboardSearch, setDashboardSearch] = useState('');
   const [dashLang, setDashLang] = useState<'en' | 'bn'>('en');
-  const [quickSigningEmail, setQuickSigningEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -308,20 +305,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
   const [examOptD, setExamOptD] = useState('');
   const [examCorrect, setExamCorrect] = useState(0);
 
-  // Admin / Branch Manager: Branch Create / Edit / Delete state
-  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
-  const [brName, setBrName] = useState('');
-  const [brCode, setBrCode] = useState('');
-  const [brCity, setBrCity] = useState('');
-  const [brAddress, setBrAddress] = useState('');
-  const [brPhone, setBrPhone] = useState('');
-  const [brManager, setBrManager] = useState('');
-  const [brStudents, setBrStudents] = useState('0');
-  const [brStatus, setBrStatus] = useState<'active' | 'inactive'>('active');
-  const [brImage, setBrImage] = useState('');
-  const [brError, setBrError] = useState<string | null>(null);
-  const [confirmBranchDeleteId, setConfirmBranchDeleteId] = useState<string | null>(null);
-
   // My Storage & Guardian link state
   const [storageModalOpen, setStorageModalOpen] = useState(false);
   const [guardianLinkInput, setGuardianLinkInput] = useState('');
@@ -368,49 +351,23 @@ export function PortalPage({ navigate }: PortalPageProps) {
   if (!user) {
     return (
       <div className="dark flex min-h-screen items-center justify-center bg-[#19212B] px-4 py-12 text-slate-100">
-        <div className="w-full max-w-lg rounded-2xl border border-[#2F3B4D] bg-[#232D3B] p-8 shadow-2xl">
+        <div className="w-full max-w-md rounded-2xl border border-[#2F3B4D] bg-[#232D3B] p-8 text-center shadow-2xl">
           <div className="flex items-center justify-center gap-2.5">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#F59E0B] to-[#1FA894] text-white">
               <GraduationCap className="h-5 w-5" />
             </span>
             <span className="text-xl font-extrabold tracking-tight text-white">
-              EduDash · Aloms EDUPro
+              Aloms EDUPro LMS
             </span>
           </div>
-          <h1 className="mt-5 text-center text-2xl font-extrabold text-white">
-            Sign In to LMS Dashboard
+          <h1 className="mt-5 text-2xl font-extrabold text-white">
+            Authentication Required
           </h1>
-          <p className="mt-1.5 text-center text-xs text-slate-400">
-            Launch instantly with a role demo account or sign in with your credentials.
+          <p className="mt-2 text-xs leading-relaxed text-slate-300">
+            Sign in with your verified Main Admin, Teacher, Student, or Guardian credentials to access the EDUPro portal.
           </p>
 
-          <div className="mt-6 space-y-2">
-            {QUICK_DEMO_ACCOUNTS.map((acc) => (
-              <button
-                key={acc.email}
-                type="button"
-                disabled={quickSigningEmail !== null}
-                onClick={async () => {
-                  setQuickSigningEmail(acc.email);
-                  await login(acc.email, 'Aloms@2026');
-                  setQuickSigningEmail(null);
-                }}
-                className="flex w-full items-center justify-between rounded-xl border border-[#2F3B4D] bg-[#1E2632] px-4 py-3 text-left transition-colors hover:border-[#1FA894] disabled:opacity-60"
-              >
-                <div>
-                  <p className="text-xs font-bold text-white">
-                    {quickSigningEmail === acc.email ? `Signing in as ${acc.role}...` : `Enter as ${acc.role}`}
-                  </p>
-                  <p className="text-[11px] text-slate-400">{acc.desc}</p>
-                </div>
-                <span className="rounded-lg bg-[#1FA894] px-3 py-1 text-[11px] font-bold text-white">
-                  Launch
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-6 flex items-center justify-between gap-3 border-t border-[#2F3B4D] pt-5">
+          <div className="mt-6 flex items-center justify-center gap-3 border-t border-[#2F3B4D] pt-5">
             <button
               type="button"
               onClick={() => navigate('/')}
@@ -424,7 +381,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
               className="inline-flex items-center gap-1.5 rounded-xl bg-white px-5 py-2.5 text-xs font-bold text-slate-900 hover:bg-slate-200"
             >
               <Shield className="h-3.5 w-3.5 text-[#1FA894]" />
-              <span>Full Login Page</span>
+              <span>Sign In to Portal</span>
             </button>
           </div>
         </div>
@@ -636,90 +593,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
     notify(`Order updated to ${status}.`);
   };
 
-  const resetBranchForm = () => {
-    setEditingBranchId(null);
-    setBrName('');
-    setBrCode('');
-    setBrCity('');
-    setBrAddress('');
-    setBrPhone('');
-    setBrManager('');
-    setBrStudents('0');
-    setBrStatus('active');
-    setBrImage('');
-    setBrError(null);
-  };
-
-  const startEditBranch = (b: Branch) => {
-    setEditingBranchId(b.id);
-    setBrName(b.name);
-    setBrCode(b.code);
-    setBrCity(b.city);
-    setBrAddress(b.address);
-    setBrPhone(b.phone);
-    setBrManager(b.managerName);
-    setBrStudents(String(b.activeStudents));
-    setBrStatus(b.status);
-    setBrImage(b.image ?? '');
-    setBrError(null);
-  };
-
-  const handleSaveBranch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBrError(null);
-    try {
-      const payload = {
-        name: brName.trim(),
-        code: brCode.trim().toUpperCase(),
-        city: brCity.trim(),
-        address: brAddress.trim(),
-        phone: brPhone.trim(),
-        managerName: brManager.trim(),
-        activeStudents: Number(brStudents) || 0,
-        status: brStatus,
-        image: brImage.trim(),
-      };
-      if (editingBranchId) {
-        await apiFetch(`/api/portal/branches/${editingBranchId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
-        notify(`Branch "${payload.name}" updated.`);
-      } else {
-        await apiFetch('/api/portal/branches', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        notify('Branch added.');
-      }
-      resetBranchForm();
-      await Promise.all([loadPortal(), refreshBootstrap()]);
-    } catch (err) {
-      setBrError(err instanceof Error ? err.message : 'Failed to save branch.');
-    }
-  };
-
-  const handleToggleBranchStatus = async (b: Branch) => {
-    await apiFetch(`/api/portal/branches/${b.id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: b.status === 'active' ? 'inactive' : 'active' }),
-    });
-    await Promise.all([loadPortal(), refreshBootstrap()]);
-    notify(`Branch "${b.name}" ${b.status === 'active' ? 'deactivated' : 'activated'}.`);
-  };
-
-  const handleDeleteBranch = async (b: Branch) => {
-    if (confirmBranchDeleteId !== b.id) {
-      setConfirmBranchDeleteId(b.id);
-      return;
-    }
-    setConfirmBranchDeleteId(null);
-    await apiFetch(`/api/portal/branches/${b.id}`, { method: 'DELETE' });
-    if (editingBranchId === b.id) resetBranchForm();
-    await Promise.all([loadPortal(), refreshBootstrap()]);
-    notify(`Branch "${b.name}" moved to Recycle Bin.`);
-  };
-
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     await apiFetch('/api/portal/settings', {
@@ -801,8 +674,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
       setSelectedBatchId(null);
       if (intent === 'courses' || intent === 'batches') {
         setCourseSubTab(intent);
-      } else if (user?.role === 'branch_manager') {
-        setCourseSubTab('batches');
       }
     }
     if (
@@ -883,9 +754,6 @@ export function PortalPage({ navigate }: PortalPageProps) {
         handleSectionRoute('guardian_monitor');
         break;
       case 'branch_edit':
-        if (user.role === 'branch_manager' && data?.branch) {
-          startEditBranch(data.branch);
-        }
         handleSectionRoute('branches');
         break;
       case 'branch_finance':
@@ -2111,18 +1979,31 @@ export function PortalPage({ navigate }: PortalPageProps) {
 
               {/* ATTENDANCE, PAYROLL & FINANCE P&L */}
               {currentSection === 'attendance_finance' && data && (
-                <AttendanceFinancePanel
-                  role={user.role}
-                  users={data.users ?? []}
-                  attendance={data.attendance ?? []}
-                  payrolls={data.payrolls ?? []}
-                  financialRecords={data.financialRecords ?? []}
-                  transactions={data.transactions ?? []}
-                  onRefresh={async () => {
-                    await Promise.all([loadPortal(), refreshBootstrap()]);
-                  }}
-                  onNotify={notify}
-                />
+                <div className="space-y-6">
+                  <AttendanceFinancePanel
+                    role={user.role}
+                    users={data.users ?? []}
+                    attendance={data.attendance ?? []}
+                    payrolls={data.payrolls ?? []}
+                    financialRecords={data.financialRecords ?? []}
+                    transactions={data.transactions ?? []}
+                    onRefresh={async () => {
+                      await Promise.all([loadPortal(), refreshBootstrap()]);
+                    }}
+                    onNotify={notify}
+                  />
+                  {user.role === 'admin' && (
+                    <FeeInvoicesWidget
+                      role={user.role}
+                      users={data.users ?? []}
+                      branches={data.branches ?? bootstrap?.branches ?? []}
+                      onRefresh={async () => {
+                        await Promise.all([loadPortal(), refreshBootstrap()]);
+                      }}
+                      onNotify={notify}
+                    />
+                  )}
+                </div>
               )}
 
               {/* AI AGENTS, SCORM 1.2, BROADCASTS, PLUGINS & SECURITY */}
@@ -2189,225 +2070,36 @@ export function PortalPage({ navigate }: PortalPageProps) {
                 />
               )}
 
-              {/* BRANCHES (FULL EDIT, UPDATE, CAMPUS PHOTO UPLOAD, ACTIVE/DEACTIVE, SOFT-DELETE) */}
-              {currentSection === 'branches' && data && (
-                <div className="space-y-6">
-                  {(user.role === 'admin' || (user.role === 'branch_manager' && Boolean(editingBranchId))) && (
-                    <form
-                      onSubmit={handleSaveBranch}
-                      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <h2 className="text-lg font-extrabold text-slate-900">
-                            {editingBranchId ? 'Edit Campus Branch & Photo' : 'Add New Campus Branch'}
-                          </h2>
-                          <p className="text-xs text-slate-500">
-                            Manage physical &amp; hybrid branch campuses, upload campus pictures to My Storage, or manage directory visibility.
-                          </p>
-                        </div>
-                        {editingBranchId && (
-                          <button
-                            type="button"
-                            onClick={resetBranchForm}
-                            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50"
-                          >
-                            Cancel Edit
-                          </button>
-                        )}
-                      </div>
-                      {brError && (
-                        <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
-                          {brError}
-                        </p>
-                      )}
-                      <ImageUploadField
-                        label="Campus Branch Photo (Upload from Device or Pick from My Storage)"
-                        value={brImage}
-                        onChange={setBrImage}
-                        category="branch"
-                        darkMode={darkMode}
-                      />
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <input
-                          type="text"
-                          required
-                          placeholder="Branch Name"
-                          value={brName}
-                          onChange={(e) => setBrName(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        />
-                        <input
-                          type="text"
-                          required
-                          disabled={user.role !== 'admin'}
-                          placeholder="Code (e.g. AEC-DMD)"
-                          value={brCode}
-                          onChange={(e) => setBrCode(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm uppercase disabled:bg-slate-100 disabled:text-slate-500"
-                        />
-                        <input
-                          type="text"
-                          required
-                          placeholder="City"
-                          value={brCity}
-                          onChange={(e) => setBrCity(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <input
-                          type="text"
-                          required
-                          placeholder="Full Address"
-                          value={brAddress}
-                          onChange={(e) => setBrAddress(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Hotline Phone"
-                          value={brPhone}
-                          onChange={(e) => setBrPhone(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <input
-                          type="text"
-                          placeholder="Branch Manager Name"
-                          value={brManager}
-                          onChange={(e) => setBrManager(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          placeholder="Active Students"
-                          value={brStudents}
-                          onChange={(e) => setBrStudents(e.target.value)}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                        />
-                        <select
-                          disabled={user.role !== 'admin'}
-                          value={brStatus}
-                          onChange={(e) => setBrStatus(e.target.value as 'active' | 'inactive')}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:bg-slate-100 disabled:text-slate-500"
-                        >
-                          <option value="active">Status: Active</option>
-                          <option value="inactive">Status: Inactive</option>
-                        </select>
-                      </div>
-                      <button
-                        type="submit"
-                        className="rounded-xl bg-[#062436] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0b3854]"
-                      >
-                        {editingBranchId ? 'Update Campus Branch' : 'Create Branch'}
-                      </button>
-                    </form>
-                  )}
+              {/* BRANCHES (MAIN ADMIN 4-STATUS GOVERNANCE, KPI ANALYTICS & AUDIT LOGS) */}
+              {currentSection === 'branches' && user.role === 'admin' && data && (
+                <BranchOperationsPanel
+                  branches={data.branches ?? bootstrap?.branches ?? []}
+                  darkMode={darkMode}
+                  onRefresh={async () => {
+                    await Promise.all([loadPortal(), refreshBootstrap()]);
+                  }}
+                  onNotify={notify}
+                />
+              )}
 
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {(data.branches ?? []).map((b) => {
-                      const confirming = confirmBranchDeleteId === b.id;
-                      const isActive = b.status === 'active';
-                      const canEditThisBranch =
-                        user.role === 'admin' || (user.role === 'branch_manager' && user.branchId === b.id);
-                      return (
-                        <div
-                          key={b.id}
-                          className={`flex flex-col justify-between overflow-hidden rounded-2xl border shadow-xs ${
-                            isActive
-                              ? 'border-slate-200 bg-white'
-                              : 'border-slate-200 bg-slate-50/85 opacity-85'
-                          }`}
-                        >
-                          {b.image && (
-                            <div className="relative h-36 w-full overflow-hidden border-b border-slate-100 bg-slate-100">
-                              <img
-                                src={b.image}
-                                alt={b.name}
-                                referrerPolicy="no-referrer"
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-                          )}
-                          <div className="flex flex-1 flex-col justify-between p-5">
-                            <div>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="font-mono-tabular text-xs font-bold text-sky-700">
-                                  {b.code} · {b.city}
-                                </span>
-                                <span
-                                  className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase ${
-                                    isActive
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : 'bg-slate-200 text-slate-600'
-                                  }`}
-                                >
-                                  {b.status}
-                                </span>
-                              </div>
-                              <h3 className="mt-1 text-base font-extrabold text-slate-900">{b.name}</h3>
-                              <p className="mt-1 text-xs text-slate-600">{b.address}</p>
-                              <p className="mt-2 text-xs font-semibold text-slate-700">
-                                Manager: {b.managerName} · Phone: {b.phone} · Students:{' '}
-                                <span className="font-mono-tabular">{b.activeStudents}</span>
-                              </p>
-                            </div>
+              {/* ACADEMIC CORE STRUCTURE & ADMISSIONS */}
+              {currentSection === 'academic_ops' && data && (
+                <AcademicOpsPanel
+                  role={user.role}
+                  branches={data.branches ?? bootstrap?.branches ?? []}
+                  courses={data.courses ?? bootstrap?.courses ?? []}
+                  batches={data.batches ?? []}
+                  users={data.users ?? []}
+                  onNotify={notify}
+                />
+              )}
 
-                            {canEditThisBranch && (
-                              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                                {user.role === 'admin' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleToggleBranchStatus(b)}
-                                    className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold ${
-                                      isActive
-                                        ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-                                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                    }`}
-                                  >
-                                    <Power className="h-3.5 w-3.5" />
-                                    <span>{isActive ? 'Deactivate' : 'Activate'}</span>
-                                  </button>
-                                ) : (
-                                  <span className="text-[11px] font-bold text-indigo-700">
-                                    Your Assigned Campus
-                                  </span>
-                                )}
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => startEditBranch(b)}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    <span>Edit Campus &amp; Photo</span>
-                                  </button>
-                                  {user.role === 'admin' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => void handleDeleteBranch(b)}
-                                      className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold ${
-                                        confirming
-                                          ? 'bg-rose-600 text-white'
-                                          : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                                      }`}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                      <span>{confirming ? 'Confirm' : 'Delete'}</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+              {/* INTEGRATIONS, REAL COMMUNICATIONS & MAIN ADMIN 2FA */}
+              {currentSection === 'integrations' && user.role === 'admin' && data && (
+                <IntegrationsAndSecurityPanel
+                  users={data.users ?? []}
+                  onNotify={notify}
+                />
               )}
 
               {/* USERS & ROLES */}
@@ -2455,7 +2147,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
                             <span className="font-mono-tabular text-base font-extrabold text-slate-900">
                               ৳{ord.totalAmount}
                             </span>
-                            {user.role === 'admin' || user.role === 'branch_manager' ? (
+                            {user.role === 'admin' ? (
                               <select
                                 aria-label={`Order status for ${ord.id}`}
                                 value={ord.status}
@@ -2915,6 +2607,14 @@ export function PortalPage({ navigate }: PortalPageProps) {
                       </div>
                     </div>
                   )}
+                  <FeeInvoicesWidget
+                    role={user.role}
+                    branches={data.branches ?? bootstrap?.branches ?? []}
+                    onRefresh={async () => {
+                      await Promise.all([loadPortal(), refreshBootstrap()]);
+                    }}
+                    onNotify={notify}
+                  />
                 </div>
               )}
 
@@ -3303,6 +3003,14 @@ export function PortalPage({ navigate }: PortalPageProps) {
                       );
                     })
                   )}
+                  <FeeInvoicesWidget
+                    role={user.role}
+                    branches={data.branches ?? bootstrap?.branches ?? []}
+                    onRefresh={async () => {
+                      await Promise.all([loadPortal(), refreshBootstrap()]);
+                    }}
+                    onNotify={notify}
+                  />
                 </div>
               )}
 
@@ -3315,11 +3023,11 @@ export function PortalPage({ navigate }: PortalPageProps) {
                   initialTab={cmsInitialTab}
                   liveStats={{
                     students:
-                      (data.branches ?? []).reduce((s, b) => s + b.activeStudents, 0) +
+                      (data.users ?? []).filter((u) => u.role === 'student').length ||
                       (data.courses ?? []).reduce((s, c) => s + c.enrolledCount, 0),
                     courses: (data.courses ?? []).filter((c) => isCourseStatusLive(c.status)).length,
                     teachers: (bootstrap?.instructors ?? []).length,
-                    videos: (data.lessons ?? []).length * 140 + 480,
+                    videos: (data.lessons ?? []).length,
                   }}
                   onNavigateHome={() => navigate('/')}
                   onSaved={async (msg) => {
@@ -3525,7 +3233,7 @@ export function PortalPage({ navigate }: PortalPageProps) {
         }
       />
 
-      {(user.role === 'admin' || user.role === 'teacher' || user.role === 'branch_manager') &&
+      {(user.role === 'admin' || user.role === 'teacher') &&
         data && (
           <BatchWizardModal
             open={batchModalOpen}

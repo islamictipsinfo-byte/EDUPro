@@ -519,8 +519,7 @@ export function SystemActivityLogsPanel({
             className={`rounded-xl border px-3 py-1.5 text-xs font-semibold focus:border-blue-500 focus:outline-none ${inputClass}`}
           >
             <option value="all">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="branch_manager">Branch Manager</option>
+            <option value="admin">Main Admin</option>
             <option value="teacher">Teacher</option>
             <option value="student">Student</option>
             <option value="guardian">Guardian</option>

@@ -21,6 +21,7 @@ import {
 } from '../lib/auditLogs';
 import {
   calculateCoursePricingServerSide,
+  getTeacherAssignedCourseIds,
   isCourseStatusLive,
   validateEnrollmentRequest,
 } from '../lib/courseEnterprise';
@@ -44,6 +45,8 @@ import type {
   ScormPackage,
   UserRole,
 } from '../types';
+import { dispatchRealCommunication } from './communicationService';
+import { assertBranchOperationalForTransactions } from './paymentService';
 import {
   createVerifiedBackupSnapshot,
   getDb,
@@ -54,6 +57,31 @@ import {
   verifyBackupSnapshotIntegrity,
   type StoredUser,
 } from './store';
+
+function isPrivateOrLocalWebhookHost(rawUrl: string): boolean {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== 'https:') return true;
+    const h = u.hostname.toLowerCase();
+    if (
+      h === 'localhost' ||
+      h === '127.0.0.1' ||
+      h === '0.0.0.0' ||
+      h === '::1' ||
+      h.endsWith('.local') ||
+      h.endsWith('.internal') ||
+      h.startsWith('10.') ||
+      h.startsWith('192.168.') ||
+      h.startsWith('169.254.') ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(h)
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 interface AuthedRequest extends Request {
   authUser?: StoredUser;
@@ -166,6 +194,9 @@ export function createPlatformRouter(
   });
 
   // ---------------- 4-STEP UNIVERSAL PAYMENT CHECKOUT ----------------
+  // Unverified gateway trxIds or manual/cash slips NEVER auto-complete paid access;
+  // Paid digital sessions must be verified via signed gateway webhook (/api/payments/webhooks/:gateway)
+  // or explicit Main Admin slip verification (/api/portal/payments/transactions/:id/status).
 
   router.post('/api/payments/checkout', requireAuth, (req: AuthedRequest, res) => {
     const db = getDb();
@@ -185,7 +216,32 @@ export function createPlatformRouter(
       gateway,
       walletOrLast4,
       trxId,
+      paymentSessionId,
     } = req.body ?? {};
+
+    if (paymentSessionId) {
+      const session = db.paymentSessions.find(
+        (s) => s.id === String(paymentSessionId).trim() && s.userId === user.id
+      );
+      if (!session) {
+        res.status(404).json({ error: 'Payment session not found.' });
+        return;
+      }
+      if (session.status !== 'verified') {
+        res.status(402).json({
+          error: 'Payment session has not been verified by the gateway webhook yet.',
+          session,
+        });
+        return;
+      }
+      const txn = db.transactions.find((t) => t.trxId === session.trxId);
+      const enrollment =
+        session.referenceType === 'course'
+          ? db.enrollments.find((e) => e.trxId === session.trxId && e.userId === user.id)
+          : undefined;
+      res.status(200).json({ transaction: txn, enrollment, verifiedByWebhook: true });
+      return;
+    }
 
     const configuredGateways = db.paymentGateways ?? [];
     const matchedGw = configuredGateways.find((g) => g.code === gateway || g.name === gateway);
@@ -208,11 +264,14 @@ export function createPlatformRouter(
     ) as PaymentGatewayType;
     const cleanTrx = String(trxId ?? '').trim().toUpperCase();
     const isCash = safeGateway === 'Branch Cash' || matchedGw?.providerType === 'cash_desk';
-    const isManual = safeGateway === 'Manual Bank Transfer' || matchedGw?.providerType === 'bank_transfer';
 
     const maybeFreeCourse =
       referenceType === 'course'
-        ? db.courses.find((c) => c.id === courseId && (Boolean(c.isFree) || (c.price === 0 && !(c.admissionFee && c.admissionFee > 0))))
+        ? db.courses.find(
+            (c) =>
+              c.id === courseId &&
+              (Boolean(c.isFree) || (c.price === 0 && !(c.admissionFee && c.admissionFee > 0)))
+          )
         : undefined;
 
     if (!isCash && !maybeFreeCourse) {
@@ -240,16 +299,20 @@ export function createPlatformRouter(
         res.status(404).json({ error: 'E-Book not found.' });
         return;
       }
-      const pricing = calculateDiscountedPrice(ebook.price, ebook.originalPrice || ebook.price, coupon);
-      const status: PaymentTransaction['status'] =
-        isCash || isManual ? 'pending_verification' : 'completed';
+      const pricing = calculateDiscountedPrice(
+        ebook.isFree ? 0 : ebook.price,
+        ebook.originalPrice || ebook.price,
+        coupon
+      );
+      const isFreeEbook = Boolean(ebook.isFree) || pricing.finalPrice === 0;
+      const status: PaymentTransaction['status'] = isFreeEbook ? 'completed' : 'pending_verification';
 
       const claimed = db.claimedEbooksByUser[user.id] ?? [];
-      if (!claimed.includes(ebook.id)) {
+      if (isFreeEbook && !claimed.includes(ebook.id)) {
         claimed.push(ebook.id);
         db.claimedEbooksByUser[user.id] = claimed;
+        ebook.salesCount = (ebook.salesCount ?? 0) + 1;
       }
-      ebook.salesCount = (ebook.salesCount ?? 0) + 1;
 
       const txn: PaymentTransaction = {
         id: `txn-${Date.now()}`,
@@ -260,7 +323,7 @@ export function createPlatformRouter(
         payerName: user.name,
         gateway: safeGateway,
         walletOrLast4: String(walletOrLast4 || phone || user.phone).slice(-14),
-        trxId: cleanTrx || `CASH-${Date.now().toString().slice(-5)}`,
+        trxId: cleanTrx || `${isFreeEbook ? 'FREE' : 'CASH'}-${Date.now().toString().slice(-5)}`,
         subtotal: pricing.basePrice,
         discountAmount: pricing.couponDiscountAmount,
         couponCode: pricing.appliedCouponCode ?? undefined,
@@ -270,18 +333,14 @@ export function createPlatformRouter(
         createdAt: new Date().toISOString(),
       };
       db.transactions.unshift(txn);
-      db.financialRecords.unshift({
-        id: `fin-${Date.now()}`,
-        type: 'income',
-        category: 'Digital E-Book & PDF Sales',
-        title: `${ebook.title} (${safeGateway}) — ${user.name}`,
-        amount: pricing.finalPrice,
-        branchId: user.branchId,
-        date: new Date().toISOString().slice(0, 10),
-        recordedBy: user.name,
-      });
 
-      recordAuditLog(db, user, 'EBOOK_CHECKOUT', ebook.title, `${safeGateway} · ৳${pricing.finalPrice} · ${invoiceNo}`);
+      recordAuditLog(
+        db,
+        user,
+        'EBOOK_CHECKOUT',
+        ebook.title,
+        `${safeGateway} · ৳${pricing.finalPrice} · ${invoiceNo} (${status})`
+      );
       saveDb(db);
       res.status(201).json({ transaction: txn, ebook, claimedEbookIds: claimed });
       return;
@@ -307,10 +366,16 @@ export function createPlatformRouter(
       const rawBranchId = String(branchId ?? '').trim();
       const resolvedCourseBranchId =
         check.resolvedBatch?.branchId || rawBranchId || activeFallbackBranch || 'online';
+      if (resolvedCourseBranchId && resolvedCourseBranchId !== 'online') {
+        const branchCheck = assertBranchOperationalForTransactions(resolvedCourseBranchId);
+        if (!branchCheck.ok) {
+          res.status(403).json({ error: branchCheck.error });
+          return;
+        }
+      }
 
       const pricing = calculateCoursePricingServerSide(course!, coupon);
-      const status: Enrollment['status'] =
-        pricing.isFree ? 'approved' : isCash || isManual ? 'pending' : 'approved';
+      const status: Enrollment['status'] = pricing.isFree ? 'approved' : 'pending';
 
       const enrollment: Enrollment = {
         id: `enr-${Date.now()}`,
@@ -333,7 +398,7 @@ export function createPlatformRouter(
           {
             id: `eh-${Date.now()}`,
             action: 'created',
-            note: `Enrolled via ${safeGateway}${check.resolvedBatch ? ` (${check.resolvedBatch.name})` : ''} · ৳${pricing.totalPayable}`,
+            note: `Checkout submitted via ${safeGateway}${check.resolvedBatch ? ` (${check.resolvedBatch.name})` : ''} · ৳${pricing.totalPayable} (${status})`,
             actorName: user.name,
             createdAt: new Date().toISOString(),
           },
@@ -367,25 +432,13 @@ export function createPlatformRouter(
         createdAt: new Date().toISOString(),
       };
       db.transactions.unshift(txn);
-      if (pricing.totalPayable > 0) {
-        db.financialRecords.unshift({
-          id: `fin-${Date.now()}`,
-          type: 'income',
-          category: 'Course Tuition Fee',
-          title: `${course!.title} (${safeGateway}) — ${user.name}`,
-          amount: pricing.totalPayable,
-          branchId: enrollment.branchId,
-          date: new Date().toISOString().slice(0, 10),
-          recordedBy: user.name,
-        });
-      }
 
       recordAuditLog(
         db,
         user,
         'PAYMENT_CHECKOUT',
         course!.title,
-        `${safeGateway} · ৳${pricing.totalPayable} · ${invoiceNo}`
+        `${safeGateway} · ৳${pricing.totalPayable} · ${invoiceNo} (${txn.status})`
       );
       saveDb(db);
       res.status(201).json({ transaction: txn, enrollment });
@@ -423,10 +476,16 @@ export function createPlatformRouter(
       const pickupTarget = String(branchPickupId ?? '').trim();
       const pickupBranch = db.branches.find((b) => b.id === pickupTarget && b.status === 'active');
       if (!pickupBranch) {
-        res.status(400).json({ error: 'Selected pickup branch is currently inactive or unavailable.' });
+        res.status(400).json({ error: 'Selected pickup branch is currently inactive, suspended, or unavailable.' });
         return;
       }
       resolvedPickupBranchId = pickupBranch.id;
+    } else if (branchId) {
+      const branchCheck = assertBranchOperationalForTransactions(String(branchId));
+      if (!branchCheck.ok) {
+        res.status(403).json({ error: branchCheck.error });
+        return;
+      }
     }
 
     const totals = calculateOrderTotalWithCoupon(orderItems, mode, coupon);
@@ -451,11 +510,13 @@ export function createPlatformRouter(
       trxId: cleanTrx || 'CASH-DESK',
       invoiceNo,
       totalAmount: totals.totalAmount,
-      status: 'processing',
+      status: totals.totalAmount === 0 ? 'processing' : 'processing',
       createdAt: new Date().toISOString(),
     };
     db.orders.unshift(order);
 
+    const txnStatus: PaymentTransaction['status'] =
+      totals.totalAmount === 0 ? 'completed' : 'pending_verification';
     const txn: PaymentTransaction = {
       id: `txn-${Date.now()}`,
       invoiceNo,
@@ -471,22 +532,18 @@ export function createPlatformRouter(
       couponCode: totals.appliedCouponCode ?? undefined,
       deliveryFee: totals.deliveryFee,
       totalAmount: totals.totalAmount,
-      status: isCash || isManual ? 'pending_verification' : 'completed',
+      status: txnStatus,
       createdAt: new Date().toISOString(),
     };
     db.transactions.unshift(txn);
-    db.financialRecords.unshift({
-      id: `fin-${Date.now()}`,
-      type: 'income',
-      category: 'Book & Merchandise Sales',
-      title: `Order ${order.id} (${safeGateway}) — ${user.name}`,
-      amount: totals.totalAmount,
-      branchId: order.branchPickupId ?? user.branchId,
-      date: new Date().toISOString().slice(0, 10),
-      recordedBy: user.name,
-    });
 
-    recordAuditLog(db, user, 'PRODUCT_CHECKOUT', order.id, `${safeGateway} · ৳${totals.totalAmount} · ${invoiceNo}`);
+    recordAuditLog(
+      db,
+      user,
+      'PRODUCT_CHECKOUT',
+      order.id,
+      `${safeGateway} · ৳${totals.totalAmount} · ${invoiceNo} (${txnStatus})`
+    );
     saveDb(db);
     res.status(201).json({ transaction: txn, order });
   });
@@ -1157,7 +1214,7 @@ export function createPlatformRouter(
   router.post(
     '/api/portal/posts',
     requireAuth,
-    requireRole(['admin', 'teacher', 'student', 'guardian', 'branch_manager']),
+    requireRole(['admin', 'teacher', 'student', 'guardian']),
     (req: AuthedRequest, res) => {
     const { title, category, content, image, status } = req.body ?? {};
     if (!String(title ?? '').trim() || !String(content ?? '').trim()) {
@@ -1333,28 +1390,97 @@ export function createPlatformRouter(
 
   // ---------------- ATTENDANCE, PAYROLL & FINANCE ----------------
 
-  router.get('/api/portal/attendance', requireAuth, requireRole(['admin', 'branch_manager', 'teacher']), (_req, res) => {
+  router.get('/api/portal/attendance', requireAuth, requireRole(['admin', 'teacher']), (req: AuthedRequest, res) => {
     const db = getDb();
+    const actor = req.authUser!;
+    if (actor.role === 'teacher') {
+      const assignedCourseIds = getTeacherAssignedCourseIds(
+        actor,
+        db.courses,
+        db.instructors,
+        db.batches
+      );
+      const assignedBatchIds = new Set(
+        db.batches.filter((b) => assignedCourseIds.has(b.courseId)).map((b) => b.id)
+      );
+      const enrolledStudentIds = new Set(
+        db.enrollments
+          .filter((e) => e.status === 'approved' && assignedCourseIds.has(e.courseId))
+          .map((e) => e.userId)
+      );
+      const scoped = db.attendance.filter(
+        (a) =>
+          a.targetId === actor.id ||
+          (a.batchId && assignedBatchIds.has(a.batchId)) ||
+          enrolledStudentIds.has(a.targetId)
+      );
+      res.json({ attendance: scoped });
+      return;
+    }
     res.json({ attendance: db.attendance });
   });
 
-  router.post('/api/portal/attendance', requireAuth, requireRole(['admin', 'branch_manager', 'teacher']), (req: AuthedRequest, res) => {
-    const { targetType, targetId, branchId, batchId, date, status, checkInTime, checkOutTime } = req.body ?? {};
+  router.post('/api/portal/attendance', requireAuth, requireRole(['admin', 'teacher']), (req: AuthedRequest, res) => {
+    const { targetType, targetId, branchId, batchId, date, status, checkInTime, checkOutTime, correctionReason } = req.body ?? {};
     const db = getDb();
+    const actor = req.authUser!;
     const targetUser = db.users.find((u) => u.id === targetId);
     if (!targetUser) return void res.status(404).json({ error: 'Student or staff user not found.' });
 
+    const safeTargetType = targetType === 'teacher' || targetType === 'staff' ? targetType : 'student';
+    if (actor.role === 'teacher') {
+      if (safeTargetType !== 'student' && targetUser.id !== actor.id) {
+        return void res.status(403).json({ error: 'Teachers can only record attendance for assigned students or themselves.' });
+      }
+      if (safeTargetType === 'student') {
+        const assignedCourseIds = getTeacherAssignedCourseIds(
+          actor,
+          db.courses,
+          db.instructors,
+          db.batches
+        );
+        const hasStudent = db.enrollments.some(
+          (e) =>
+            e.userId === targetUser.id &&
+            e.status === 'approved' &&
+            assignedCourseIds.has(e.courseId)
+        );
+        if (!hasStudent) {
+          return void res.status(403).json({ error: 'This student is not enrolled in your assigned courses or batches.' });
+        }
+      }
+    }
+
     const cleanDate = String(date || new Date().toISOString().slice(0, 10));
-    const safeStatus = ['present', 'absent', 'late', 'leave'].includes(status) ? status : 'present';
+    const safeStatus = ['present', 'absent', 'late', 'leave', 'excused'].includes(status) ? status : 'present';
+    const normalizedBatchId = batchId ? String(batchId) : null;
     const existing = db.attendance.find(
-      (a) => a.targetId === targetId && a.date === cleanDate
+      (a) =>
+        a.targetType === safeTargetType &&
+        a.targetId === targetId &&
+        a.date === cleanDate &&
+        (a.batchId ?? null) === normalizedBatchId
     );
 
     if (existing) {
+      const previousStatus = existing.status;
       existing.status = safeStatus;
       if (checkInTime) existing.checkInTime = String(checkInTime);
       if (checkOutTime) existing.checkOutTime = String(checkOutTime);
-      existing.recordedBy = req.authUser!.name;
+      existing.recordedBy = actor.name;
+      if (previousStatus !== safeStatus) {
+        existing.correctionHistory = [
+          {
+            id: `ac-${Date.now()}`,
+            previousStatus,
+            newStatus: safeStatus,
+            reason: String(correctionReason || 'Attendance status updated').trim().slice(0, 240),
+            actorName: actor.name,
+            createdAt: new Date().toISOString(),
+          },
+          ...(existing.correctionHistory ?? []),
+        ];
+      }
       saveDb(db);
       res.json({ record: existing, attendance: db.attendance });
       return;
@@ -1362,23 +1488,23 @@ export function createPlatformRouter(
 
     const record: AttendanceRecord = {
       id: `att-${Date.now()}`,
-      targetType: targetType === 'teacher' || targetType === 'staff' ? targetType : 'student',
+      targetType: safeTargetType,
       targetId: targetUser.id,
       targetName: targetUser.name,
       branchId: branchId ?? targetUser.branchId,
-      batchId: batchId ?? null,
+      batchId: normalizedBatchId,
       date: cleanDate,
       status: safeStatus,
       checkInTime: String(checkInTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
       checkOutTime: checkOutTime ? String(checkOutTime) : undefined,
-      recordedBy: req.authUser!.name,
+      recordedBy: actor.name,
     };
     db.attendance.unshift(record);
     saveDb(db);
     res.status(201).json({ record, attendance: db.attendance });
   });
 
-  router.post('/api/portal/payroll', requireAuth, requireRole(['admin', 'branch_manager']), (req: AuthedRequest, res) => {
+  router.post('/api/portal/payroll', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
     const { employeeId, monthKey, baseSalary, allowances, bonuses, deductions, advance } = req.body ?? {};
     const db = getDb();
     const emp = db.users.find((u) => u.id === employeeId);
@@ -1421,7 +1547,7 @@ export function createPlatformRouter(
     res.status(201).json({ payroll, payrolls: db.payrolls });
   });
 
-  router.patch('/api/portal/payroll/:id', requireAuth, requireRole(['admin', 'branch_manager']), (req: AuthedRequest, res) => {
+  router.patch('/api/portal/payroll/:id', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
     const db = getDb();
     const pr = db.payrolls.find((p) => p.id === req.params.id);
     if (!pr) return void res.status(404).json({ error: 'Payroll record not found.' });
@@ -1446,7 +1572,7 @@ export function createPlatformRouter(
     res.json({ payroll: pr, payrolls: db.payrolls });
   });
 
-  router.post('/api/portal/finance', requireAuth, requireRole(['admin', 'branch_manager']), (req: AuthedRequest, res) => {
+  router.post('/api/portal/finance', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
     const { type, category, title, amount, branchId } = req.body ?? {};
     if (!String(title ?? '').trim() || Number(amount) <= 0) {
       res.status(400).json({ error: 'Valid entry title and positive amount are required.' });
@@ -1521,9 +1647,26 @@ export function createPlatformRouter(
       res.status(400).json({ error: 'Backup SHA-256 checksum verification failed! Restore aborted for data safety.' });
       return;
     }
+    let restored: any;
+    try {
+      restored = JSON.parse(target.payloadJson);
+    } catch {
+      res.status(400).json({ error: 'Backup payload JSON is corrupted. Restore aborted.' });
+      return;
+    }
+    if (!restored || !Array.isArray(restored.users) || !Array.isArray(restored.branches)) {
+      res.status(400).json({ error: 'Backup structure invalid. Restore aborted.' });
+      return;
+    }
+    const adminCount = restored.users.filter((u: any) => u.role === 'admin').length;
+    if (adminCount > 1) {
+      res.status(400).json({
+        error: `Restore aborted: Backup contains ${adminCount} admin accounts. Only one Main Admin is allowed.`,
+      });
+      return;
+    }
     createVerifiedBackupSnapshot(db, req.authUser!.name, 'Safety Pre-Restore Snapshot', 'pre_restore');
     const keptBackups = [...db.backups];
-    const restored = JSON.parse(target.payloadJson);
     restored.backups = keptBackups;
     recordAuditLog(restored, req.authUser!, 'BACKUP_RESTORE', target.id, target.label);
     saveDb(restored);
@@ -1590,7 +1733,7 @@ export function createPlatformRouter(
 
   // ---------------- DEDICATED PAYMENT GATEWAYS & TRANSACTIONS ----------------
 
-  router.get('/api/portal/payment-gateways', requireAuth, requireRole(['admin', 'branch_manager']), (_req, res) => {
+  router.get('/api/portal/payment-gateways', requireAuth, requireRole(['admin']), (_req, res) => {
     const db = getDb();
     res.json({ paymentGateways: db.paymentGateways ?? [], transactions: db.transactions ?? [] });
   });
@@ -1689,7 +1832,7 @@ export function createPlatformRouter(
     res.json({ deletedId: removed.id, paymentGateways: db.paymentGateways });
   });
 
-  router.patch('/api/portal/payments/transactions/:id/status', requireAuth, requireRole(['admin', 'branch_manager']), (req: AuthedRequest, res) => {
+  router.patch('/api/portal/payments/transactions/:id/status', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
     const db = getDb();
     const txn = db.transactions.find((t) => t.id === req.params.id);
     if (!txn) return void res.status(404).json({ error: 'Payment transaction not found.' });
@@ -1699,6 +1842,17 @@ export function createPlatformRouter(
       return;
     }
     const prev = txn.status;
+    if (nextStatus === 'completed' && txn.referenceType === 'course') {
+      const enrCheck = db.enrollments.find((e) => e.id === txn.referenceId);
+      if (enrCheck?.branchId && enrCheck.branchId !== 'online') {
+        const bCheck = assertBranchOperationalForTransactions(enrCheck.branchId);
+        if (!bCheck.ok) {
+          res.status(403).json({ error: bCheck.error });
+          return;
+        }
+      }
+    }
+
     txn.status = nextStatus;
 
     if (txn.referenceType === 'course') {
@@ -1708,10 +1862,48 @@ export function createPlatformRouter(
           enr.status = 'approved';
           const course = db.courses.find((c) => c.id === enr.courseId);
           if (course) course.enrolledCount += 1;
+          if (enr.batchId) {
+            const batch = db.batches.find((b) => b.id === enr.batchId);
+            if (batch) batch.enrolledSeats += 1;
+          }
         } else if (nextStatus === 'refunded') {
+          if (enr.status === 'approved') {
+            const course = db.courses.find((c) => c.id === enr.courseId);
+            if (course) course.enrolledCount = Math.max(0, course.enrolledCount - 1);
+            if (enr.batchId) {
+              const batch = db.batches.find((b) => b.id === enr.batchId);
+              if (batch) batch.enrolledSeats = Math.max(0, batch.enrolledSeats - 1);
+            }
+          }
           enr.status = 'rejected';
         }
       }
+    } else if (txn.referenceType === 'ebook' && nextStatus === 'completed') {
+      const claimed = db.claimedEbooksByUser[txn.userId] ?? [];
+      if (!claimed.includes(txn.referenceId)) {
+        claimed.push(txn.referenceId);
+        db.claimedEbooksByUser[txn.userId] = claimed;
+        const ebook = db.ebooks.find((e) => e.id === txn.referenceId);
+        if (ebook) ebook.salesCount = (ebook.salesCount ?? 0) + 1;
+      }
+    }
+
+    if (prev !== 'completed' && nextStatus === 'completed' && txn.totalAmount > 0) {
+      db.financialRecords.unshift({
+        id: `fin-${Date.now()}`,
+        type: 'income',
+        category:
+          txn.referenceType === 'ebook'
+            ? 'Digital E-Book & PDF Sales'
+            : txn.referenceType === 'order'
+              ? 'Book & Merchandise Sales'
+              : 'Verified Course Tuition Fee',
+        title: `Verified ${txn.invoiceNo} (${txn.gateway}) — ${txn.payerName}`,
+        amount: txn.totalAmount,
+        branchId: req.authUser!.branchId,
+        date: new Date().toISOString().slice(0, 10),
+        recordedBy: req.authUser!.name,
+      });
     }
 
     if (prev !== 'refunded' && nextStatus === 'refunded') {
@@ -1836,18 +2028,19 @@ export function createPlatformRouter(
   router.post('/api/portal/webhooks', requireAuth, requireRole(['admin']), (req: AuthedRequest, res) => {
     const { name, url, event } = req.body ?? {};
     const safeUrl = sanitizeSafeUrl(String(url ?? ''), '');
-    if (!String(name ?? '').trim() || !safeUrl) {
-      res.status(400).json({ error: 'Valid webhook name and https:// URL are required.' });
+    if (!String(name ?? '').trim() || !safeUrl || isPrivateOrLocalWebhookHost(safeUrl)) {
+      res.status(400).json({ error: 'Valid webhook name and public https:// URL are required.' });
       return;
     }
     const db = getDb();
+    const isActive = req.body?.active !== false;
     const webhook = {
       id: `wh-${Date.now()}`,
       name: String(name).trim(),
       url: safeUrl,
       event: String(event || 'enrollment.approved').trim(),
-      active: req.body?.active !== false,
-      lastStatus: req.body?.active === false ? 'Paused' : 'Ready',
+      active: isActive,
+      lastStatus: isActive ? 'Awaiting Configuration' : 'Paused',
       secretMasked: `whsec_••••${crypto.randomBytes(2).toString('hex')}`,
     };
     db.webhooks.unshift(webhook);
@@ -1864,13 +2057,15 @@ export function createPlatformRouter(
     if (typeof name === 'string' && name.trim()) wh.name = name.trim();
     if (typeof url === 'string' && url.trim()) {
       const safeUrl = sanitizeSafeUrl(url, '');
-      if (!safeUrl) return void res.status(400).json({ error: 'Valid https:// webhook URL is required.' });
+      if (!safeUrl || isPrivateOrLocalWebhookHost(safeUrl)) {
+        return void res.status(400).json({ error: 'Valid public https:// webhook URL is required.' });
+      }
       wh.url = safeUrl;
     }
     if (typeof event === 'string' && event.trim()) wh.event = event.trim();
     if (typeof active === 'boolean') {
       wh.active = active;
-      wh.lastStatus = active ? 'Ready' : 'Paused';
+      wh.lastStatus = active ? 'Awaiting Verification' : 'Paused';
     }
     recordAuditLog(db, req.authUser!, 'WEBHOOK_UPDATE', wh.name, `${wh.event} (${wh.active ? 'Active' : 'Paused'})`);
     saveDb(db);
@@ -1882,7 +2077,7 @@ export function createPlatformRouter(
     const wh = db.webhooks.find((w) => w.id === req.params.id);
     if (!wh) return void res.status(404).json({ error: 'Webhook not found.' });
     wh.active = typeof req.body?.active === 'boolean' ? req.body.active : !wh.active;
-    wh.lastStatus = wh.active ? 'Ready' : 'Paused';
+    wh.lastStatus = wh.active ? 'Awaiting Verification' : 'Paused';
     recordAuditLog(db, req.authUser!, 'WEBHOOK_STATUS', wh.name, wh.active ? 'Activated' : 'Deactivated');
     saveDb(db);
     res.json({ webhook: wh, webhooks: db.webhooks });
@@ -1898,27 +2093,103 @@ export function createPlatformRouter(
     res.json({ deletedId: removed.id, webhooks: db.webhooks });
   });
 
-  router.post('/api/portal/campaigns', requireAuth, requireRole(['admin', 'branch_manager', 'teacher']), (req: AuthedRequest, res) => {
+  router.post('/api/portal/campaigns', requireAuth, requireRole(['admin', 'teacher']), async (req: AuthedRequest, res) => {
     const { title, channel, audience, message } = req.body ?? {};
     if (!String(title ?? '').trim() || !String(message ?? '').trim()) {
       res.status(400).json({ error: 'Campaign title and broadcast message are required.' });
       return;
     }
     const db = getDb();
+    const actor = req.authUser!;
+    const safeChannel = (
+      ['SMS', 'Email', 'WhatsApp', 'Notice'].includes(channel) ? channel : 'Notice'
+    ) as 'SMS' | 'Email' | 'WhatsApp' | 'Notice';
+    const audienceLabel = String(audience || 'All Active Students').trim();
+
+    let targetUsers = db.users.filter((u) => u.status === 'active');
+    if (actor.role === 'teacher') {
+      const assignedCourseIds = getTeacherAssignedCourseIds(
+        actor,
+        db.courses,
+        db.instructors,
+        db.batches
+      );
+      const enrolledIds = new Set(
+        db.enrollments
+          .filter((e) => e.status === 'approved' && assignedCourseIds.has(e.courseId))
+          .map((e) => e.userId)
+      );
+      targetUsers = targetUsers.filter((u) => u.role === 'student' && enrolledIds.has(u.id));
+    } else if (audienceLabel.toLowerCase().includes('guardian')) {
+      targetUsers = targetUsers.filter((u) => u.role === 'guardian');
+    } else if (audienceLabel.toLowerCase().includes('teacher')) {
+      targetUsers = targetUsers.filter((u) => u.role === 'teacher');
+    } else if (audienceLabel.toLowerCase().includes('student')) {
+      targetUsers = targetUsers.filter((u) => u.role === 'student');
+    }
+
+    const mappedChannel: 'email' | 'sms' | 'whatsapp' | 'in_app' =
+      safeChannel === 'Email'
+        ? 'email'
+        : safeChannel === 'SMS'
+          ? 'sms'
+          : safeChannel === 'WhatsApp'
+            ? 'whatsapp'
+            : 'in_app';
+
+    let sentCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+    for (const recipientUser of targetUsers.slice(0, 100)) {
+      const recipientAddr =
+        mappedChannel === 'email'
+          ? recipientUser.email
+          : mappedChannel === 'sms' || mappedChannel === 'whatsapp'
+            ? recipientUser.phone
+            : recipientUser.email;
+      const result = await dispatchRealCommunication({
+        channel: mappedChannel,
+        recipient: recipientAddr,
+        recipientUserId: recipientUser.id,
+        subject: String(title).trim(),
+        message: String(message).trim(),
+        notificationType: 'info',
+        actionUrl: '/portal',
+      });
+      if (result.status === 'delivered' || result.status === 'accepted') {
+        sentCount += 1;
+      } else if (result.status === 'skipped_opt_out') {
+        skippedCount += 1;
+      } else {
+        failedCount += 1;
+      }
+    }
+
+    const latestDb = getDb();
     const camp = {
       id: `cmp-${Date.now()}`,
       title: String(title).trim(),
-      channel: (['SMS', 'Email', 'WhatsApp', 'Notice'].includes(channel) ? channel : 'SMS') as 'SMS' | 'Email' | 'WhatsApp' | 'Notice',
-      audience: String(audience || 'All Active Students').trim(),
+      channel: safeChannel,
+      audience: audienceLabel,
       message: String(message).trim(),
-      sentCount: db.users.length * 45,
-      status: 'sent' as const,
+      sentCount,
+      status: (sentCount > 0 ? 'sent' : 'failed') as 'sent' | 'failed',
       createdAt: new Date().toISOString(),
     };
-    db.campaigns.unshift(camp);
-    recordAuditLog(db, req.authUser!, 'BROADCAST_SEND', camp.title, `${camp.channel} -> ${camp.audience}`);
-    saveDb(db);
-    res.status(201).json({ campaign: camp, campaigns: db.campaigns });
+    latestDb.campaigns.unshift(camp);
+    recordAuditLog(
+      latestDb,
+      actor,
+      'BROADCAST_SEND',
+      camp.title,
+      `${camp.channel} -> ${camp.audience} · delivered=${sentCount}, failed=${failedCount}, optedOut=${skippedCount}`
+    );
+    saveDb(latestDb);
+    res.status(201).json({
+      campaign: camp,
+      campaigns: latestDb.campaigns,
+      deliverySummary: { sentCount, failedCount, skippedCount, targetCount: targetUsers.length },
+    });
   });
 
   // ---------------- REAL-TIME SYSTEM ACTIVITY LOGS (ADMIN AUDIT STREAM) ----------------
@@ -1933,7 +2204,6 @@ export function createPlatformRouter(
     const rawRole = String(req.query.role ?? 'all').trim();
     const actorRole =
       rawRole === 'admin' ||
-      rawRole === 'branch_manager' ||
       rawRole === 'teacher' ||
       rawRole === 'student' ||
       rawRole === 'guardian'

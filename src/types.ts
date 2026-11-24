@@ -1,4 +1,6 @@
-export type UserRole = 'admin' | 'branch_manager' | 'teacher' | 'student' | 'guardian';
+export type UserRole = 'admin' | 'teacher' | 'student' | 'guardian';
+
+export type BranchStatus = 'active' | 'inactive' | 'suspended' | 'archived';
 
 export interface Branch {
   id: string;
@@ -9,8 +11,34 @@ export interface Branch {
   phone: string;
   managerName: string;
   activeStudents: number;
-  status: 'active' | 'inactive';
+  status: BranchStatus;
   image?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  archivedAt?: string | null;
+}
+
+export interface BranchStatusHistoryEntry {
+  id: string;
+  branchId: string;
+  branchName: string;
+  previousStatus: BranchStatus;
+  newStatus: BranchStatus;
+  reason: string;
+  actorId: string;
+  actorName: string;
+  createdAt: string;
+}
+
+export interface RevokedLegacyAccount {
+  id: string;
+  originalUserId: string;
+  name: string;
+  email: string;
+  previousRole: string;
+  branchId: string | null;
+  reason: string;
+  revokedAt: string;
 }
 
 export interface MediaAsset {
@@ -40,6 +68,13 @@ export interface User {
   status?: 'active' | 'suspended';
   bio?: string;
   subjectSpecialty?: string;
+  mustResetPassword?: boolean;
+  twoFactorEnabled?: boolean;
+  communicationConsent?: {
+    email: boolean;
+    sms: boolean;
+    whatsapp: boolean;
+  };
   lastLoginAt?: string;
   createdAt: string;
 }
@@ -474,6 +509,7 @@ export interface ExamQuestion {
   chapter?: string;
   difficulty?: 'Easy' | 'Medium' | 'Hard';
   type?: 'mcq' | 'true_false' | 'written';
+  questionType?: 'mcq' | 'true_false' | 'written';
 }
 
 export interface QuestionBankItem extends ExamQuestion {
@@ -514,6 +550,11 @@ export interface ExamAttempt {
   grade: string;
   passed: boolean;
   answers: Record<string, number>;
+  writtenAnswers?: Record<string, string>;
+  writtenScores?: Record<string, number>;
+  gradingStatus?: 'auto_graded' | 'pending_manual' | 'graded';
+  startedAt?: string;
+  durationSecondsTaken?: number;
   teacherFeedback?: string;
   gradedBy?: string;
   gradedAt?: string;
@@ -852,13 +893,21 @@ export interface AttendanceRecord {
   checkOutTime?: string;
   notes?: string;
   recordedBy: string;
+  correctionHistory?: Array<{
+    id: string;
+    previousStatus: AttendanceRecord['status'];
+    newStatus: AttendanceRecord['status'];
+    reason: string;
+    actorName: string;
+    createdAt: string;
+  }>;
 }
 
 export interface PayrollRecord {
   id: string;
   employeeId: string;
   employeeName: string;
-  role: UserRole;
+  role: UserRole | 'legacy_revoked';
   branchId: string | null;
   monthKey: string;
   baseSalary: number;
@@ -968,7 +1017,7 @@ export interface BroadcastCampaign {
   audience: string;
   message: string;
   sentCount: number;
-  status: 'sent' | 'scheduled' | 'draft';
+  status: 'sent' | 'scheduled' | 'draft' | 'failed';
   createdAt: string;
 }
 
@@ -1124,6 +1173,192 @@ export interface SiteSettings {
   heroSlides: HeroSlide[];
   homepageConfig?: HomepageConfig;
   dashboardConfig?: DashboardCustomizationConfig;
+}
+
+export interface AcademicYear {
+  id: string;
+  name: string;
+  code: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  status: 'active' | 'upcoming' | 'archived';
+  createdAt: string;
+}
+
+export interface AcademicClassSection {
+  id: string;
+  academicYearId: string;
+  branchId: string;
+  className: string;
+  sectionName: string;
+  roomLabel?: string;
+  capacity: number;
+  classTeacherUserId?: string | null;
+  status: 'active' | 'archived';
+}
+
+export interface AcademicSubject {
+  id: string;
+  code: string;
+  name: string;
+  classLevel: string;
+  courseId?: string | null;
+  creditsOrMarks: number;
+  status: 'active' | 'archived';
+}
+
+export interface CourseRoutineItem {
+  id: string;
+  courseId: string;
+  batchId?: string | null;
+  branchId: string;
+  subjectId?: string | null;
+  teacherUserId?: string | null;
+  dayOfWeek: BatchWeekDay;
+  startTime: string;
+  endTime: string;
+  roomOrLink: string;
+  status: 'active' | 'cancelled';
+}
+
+export interface StudentAdmissionRecord {
+  id: string;
+  admissionNo: string;
+  studentUserId: string;
+  studentName: string;
+  rollNumber: string;
+  branchId: string;
+  academicYearId: string;
+  classSectionId?: string | null;
+  guardianName?: string;
+  guardianPhone?: string;
+  bloodGroup?: string;
+  emergencyContact?: string;
+  admissionFeePaid: number;
+  admissionStatus: 'active' | 'promoted' | 'transferred' | 'completed' | 'suspended';
+  admittedAt: string;
+}
+
+export interface LessonProgressRecord {
+  id: string;
+  userId: string;
+  courseId: string;
+  lessonId: string;
+  watchedSeconds: number;
+  durationSeconds: number;
+  percentWatched: number;
+  completed: boolean;
+  lastPositionAt: string;
+}
+
+export interface AttendanceCorrectionEntry {
+  id: string;
+  attendanceId: string;
+  targetName: string;
+  previousStatus: AttendanceRecord['status'];
+  newStatus: AttendanceRecord['status'];
+  reason: string;
+  correctedById: string;
+  correctedByName: string;
+  correctedAt: string;
+}
+
+export interface FeeInvoice {
+  id: string;
+  invoiceNo: string;
+  studentUserId: string;
+  studentName: string;
+  branchId: string;
+  courseId?: string | null;
+  batchId?: string | null;
+  feeType: 'admission' | 'tuition' | 'installment' | 'exam' | 'ebook';
+  title: string;
+  totalAmount: number;
+  paidAmount: number;
+  dueAmount: number;
+  dueDate: string;
+  installmentPlanLabel?: string;
+  status: 'unpaid' | 'partial' | 'paid' | 'overdue' | 'refunded';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentSessionRecord {
+  id: string;
+  idempotencyKey: string;
+  userId: string;
+  referenceType: 'course' | 'order' | 'ebook' | 'invoice';
+  referenceId: string;
+  branchId: string | null;
+  gateway: PaymentGatewayType | string;
+  mode: 'sandbox' | 'live';
+  amount: number;
+  currency: 'BDT';
+  status: 'initiated' | 'pending_verification' | 'verified' | 'failed' | 'expired';
+  providerPaymentId?: string;
+  checkoutUrl?: string;
+  trxId?: string;
+  webhookVerifiedAt?: string;
+  metadataJson?: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export type IntegrationCategory =
+  | 'Payment'
+  | 'SMS'
+  | 'Email'
+  | 'WhatsApp'
+  | 'Google'
+  | 'Live Video'
+  | 'AI'
+  | 'Analytics & Ads'
+  | 'Cloud & Storage'
+  | 'Webhooks';
+
+export interface IntegrationConfig {
+  id: string;
+  key: string;
+  name: string;
+  category: IntegrationCategory;
+  description: string;
+  enabled: boolean;
+  mode: 'sandbox' | 'live';
+  configured: boolean;
+  healthStatus: 'awaiting_configuration' | 'configured' | 'healthy' | 'error';
+  lastTestedAt?: string;
+  lastError?: string;
+  publicConfig: Record<string, string>;
+  secretsMasked: Record<string, string>;
+  updatedAt: string;
+}
+
+export interface CommunicationLogEntry {
+  id: string;
+  channel: 'email' | 'sms' | 'whatsapp' | 'push' | 'in_app';
+  provider: string;
+  recipient: string;
+  recipientUserId?: string;
+  subject?: string;
+  bodyPreview: string;
+  status: 'queued' | 'accepted' | 'delivered' | 'failed' | 'skipped_opt_out';
+  providerMessageId?: string;
+  errorMessage?: string;
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InAppNotification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'info' | 'payment' | 'exam' | 'live_class' | 'attendance' | 'branch';
+  read: boolean;
+  actionUrl?: string;
+  createdAt: string;
 }
 
 

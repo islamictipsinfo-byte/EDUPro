@@ -80,7 +80,7 @@ const sampleData = {
   ],
 };
 
-test('buildKpiCards returns 4 distinct KPI cards with formatted values', () => {
+test('buildKpiCards returns 4 distinct KPI cards with formatted real values', () => {
   const kpis = buildKpiCards(sampleData);
   assert.equal(kpis.length, 4);
   assert.deepEqual(
@@ -89,7 +89,7 @@ test('buildKpiCards returns 4 distinct KPI cards with formatted values', () => {
   );
   assert.ok(kpis[3].valueDisplay.startsWith('৳'));
   assert.equal(kpis[0].positive, true);
-  assert.equal(kpis[3].positive, false);
+  assert.equal(kpis[3].rawValue, 45000);
 });
 
 test('buildEarningSeries adjusts bars and headline across Yearly, Quarterly, and Monthly', () => {
@@ -115,7 +115,7 @@ test('buildCalendarGrid produces complete 7-column weeks and marks event dates',
   assert.equal(day18?.hasEvent, true);
 });
 
-test('buildUserActivitySeries sums to ~100% across 4 traffic sources', () => {
+test('buildUserActivitySeries distributes real platform segments cleanly', () => {
   const segments = buildUserActivitySeries(sampleData, 'Yearly');
   assert.equal(segments.length, 4);
   const sumPct = segments.reduce((s, item) => s + item.percentage, 0);
@@ -124,29 +124,28 @@ test('buildUserActivitySeries sums to ~100% across 4 traffic sources', () => {
 
 test('buildCourseActivitySeries returns aligned paid and free series', () => {
   const yearly = buildCourseActivitySeries(sampleData, 'Yearly');
-  assert.equal(yearly.labels.length, 9);
+  assert.equal(yearly.labels.length, 4);
   assert.equal(yearly.paidSeries.length, yearly.labels.length);
   assert.equal(yearly.freeSeries.length, yearly.labels.length);
 });
 
-test('buildUpcomingSessions and buildRecentEnrolledRows support search filtering', () => {
+test('buildUpcomingSessions and buildRecentEnrolledRows reflect real records without fake padding', () => {
   const allSessions = buildUpcomingSessions(sampleData);
-  assert.equal(allSessions.length, 4);
-  const filteredSessions = buildUpcomingSessions(sampleData, 'Kabir');
-  assert.equal(filteredSessions.length, 1);
+  assert.equal(allSessions.length, 0);
 
   const rows = buildRecentEnrolledRows(sampleData.enrollments);
-  assert.equal(rows.length, 5);
+  assert.equal(rows.length, 1);
   assert.equal(rows[0].student, 'Ayesha Siddika');
   const filteredRows = buildRecentEnrolledRows(sampleData.enrollments, 'Ayesha');
   assert.equal(filteredRows.length, 1);
 });
 
-test('buildTopStudents and buildTopInstructors always provide 5 ranked rows', () => {
+test('buildTopStudents and buildTopInstructors return actual ranked records only', () => {
   const topStudents = buildTopStudents(sampleData);
   const topInstructors = buildTopInstructors(sampleData.instructors, []);
-  assert.equal(topStudents.length, 5);
-  assert.equal(topInstructors.length, 5);
+  assert.equal(topStudents.length, 1);
+  assert.equal(topStudents[0].name, 'Ayesha Siddika');
+  assert.equal(topInstructors.length, 1);
   assert.equal(topInstructors[0].name, 'Prof. Alomgir Kabir');
 });
 
@@ -169,10 +168,10 @@ test('futuristic LMS builders return aligned KPI, analytics, progress, live spot
   assert.ok(spotlight.title.length > 0);
 
   const feed = buildRecentActivityFeed(sampleData);
-  assert.equal(feed.length, 5);
+  assert.equal(feed.length, 2);
   assert.ok(feed[0].text.includes('Ayesha Siddika'));
 
   const upcoming = buildUpcomingClassRows(sampleData);
-  assert.equal(upcoming.length, 3);
+  assert.equal(upcoming.length, 0);
 });
 

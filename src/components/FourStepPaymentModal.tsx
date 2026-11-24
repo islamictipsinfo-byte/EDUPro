@@ -22,7 +22,7 @@ import type { Branch, CourseBatch, PaymentGatewayType, PaymentTransaction } from
 interface FourStepPaymentModalProps {
   open: boolean;
   onClose: () => void;
-  referenceType: 'course' | 'order' | 'ebook';
+  referenceType: 'course' | 'order' | 'ebook' | 'invoice';
   itemTitle: string;
   baseAmount: number;
   deliveryFee?: number;
@@ -30,6 +30,7 @@ interface FourStepPaymentModalProps {
   initialDiscount?: number;
   courseId?: string;
   ebookId?: string;
+  invoiceId?: string;
   branchId?: string;
   branches?: Branch[];
   batches?: CourseBatch[];
@@ -68,6 +69,7 @@ export function FourStepPaymentModal({
   initialDiscount = 0,
   courseId,
   ebookId,
+  invoiceId,
   branchId,
   branches = [],
   batches = [],
@@ -142,8 +144,8 @@ export function FourStepPaymentModal({
   }, [bootstrap?.paymentGateways]);
 
   const [gateway, setGateway] = useState<PaymentGatewayType>(activeGateways[0]?.id ?? 'bKash');
-  const [walletOrLast4, setWalletOrLast4] = useState(user?.phone || '01710000004');
-  const [trxId, setTrxId] = useState(`AEC${Date.now().toString().slice(-6)}`);
+  const [walletOrLast4, setWalletOrLast4] = useState(user?.phone || '');
+  const [trxId, setTrxId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<PaymentTransaction | null>(null);
@@ -157,7 +159,8 @@ export function FourStepPaymentModal({
       setCouponInput(initialCouponCode);
       setAppliedCoupon(initialCouponCode);
       setDiscountAmount(initialDiscount);
-      setTrxId(`AEC${Date.now().toString().slice(-6)}`);
+      setWalletOrLast4(user?.phone || '');
+      setTrxId('');
       if (selectedBatchId) {
         setSelectedBatch(selectedBatchId);
       } else {
@@ -167,7 +170,7 @@ export function FourStepPaymentModal({
         setSelectedBatch(firstOpen?.id || '');
       }
     }
-  }, [open, initialCouponCode, initialDiscount, selectedBatchId, courseBatches]);
+  }, [open, initialCouponCode, initialDiscount, selectedBatchId, courseBatches, user?.phone]);
 
   useEffect(() => {
     const resolved = resolveDefaultActiveBranchId(activeBranches, branchId);
@@ -185,6 +188,7 @@ export function FourStepPaymentModal({
   const selectedGwObj = activeGateways.find((g) => g.id === gateway) ?? activeGateways[0];
   const netPayable = Math.max(0, baseAmount - discountAmount + deliveryFee);
   const isCash = gateway === 'Branch Cash' || selectedGwObj?.providerType === 'cash_desk';
+  const isManualSlip = gateway === 'Manual Bank Transfer' || selectedGwObj?.providerType === 'bank_transfer';
 
   const handleApplyCoupon = async () => {
     setCouponMsg(null);
@@ -241,9 +245,78 @@ export function FourStepPaymentModal({
     setSubmitting(true);
     try {
       const effectiveBranchId =
-        referenceType === 'course'
-          ? selectedBranch || 'online'
-          : undefined;
+        referenceType === 'course' || referenceType === 'invoice'
+          ? selectedBranch || branchId || 'online'
+          : branchId;
+
+      const useManualSubmission = isCash || isManualSlip || (trxId.trim().length >= 5 && referenceType !== 'invoice');
+      if (!useManualSubmission) {
+        const idempotencyKey = `web-${user?.id ?? 'anon'}-${referenceType}-${courseId || ebookId || invoiceId || Date.now()}`;
+        const initRes = await apiFetch<{
+          session: { id: string; mode: 'sandbox' | 'live'; amount: number };
+          sandboxSignPayload?: {
+            sessionId: string;
+            gateway: string;
+            trxId: string;
+            amount: number;
+            signature: string;
+          };
+          immediateFreeActivation?: boolean;
+          result?: { transaction?: PaymentTransaction };
+        }>('/api/payments/initiate', {
+          method: 'POST',
+          body: JSON.stringify({
+            idempotencyKey,
+            referenceType,
+            courseId,
+            ebookId,
+            invoiceId,
+            batchId: referenceType === 'course' && selectedBatch ? selectedBatch : undefined,
+            branchId: effectiveBranchId,
+            items: orderItems,
+            deliveryMode,
+            deliveryAddress,
+            phone: phone || walletOrLast4.trim() || user?.phone,
+            branchPickupId,
+            couponCode: appliedCoupon,
+            gateway,
+          }),
+        });
+
+        if (initRes.immediateFreeActivation && initRes.result?.transaction) {
+          setReceipt(initRes.result.transaction);
+          setStep(4);
+          await onSuccess({ transaction: initRes.result.transaction });
+          return;
+        }
+
+        if (initRes.sandboxSignPayload) {
+          const whRes = await apiFetch<{ transaction: PaymentTransaction }>(
+            `/api/payments/webhooks/${encodeURIComponent(gateway.toLowerCase())}`,
+            {
+              method: 'POST',
+              headers: {
+                'X-Webhook-Signature': initRes.sandboxSignPayload.signature,
+              },
+              body: JSON.stringify({
+                ...initRes.sandboxSignPayload,
+                status: 'SUCCESS',
+              }),
+            }
+          );
+          if (whRes.transaction) {
+            setReceipt(whRes.transaction);
+            setStep(4);
+            await onSuccess({ transaction: whRes.transaction });
+            return;
+          }
+        }
+      }
+
+      if (referenceType === 'invoice') {
+        throw new Error('Invoice payments require an active gateway session or sandbox webhook callback.');
+      }
+
       const res = await apiFetch<{ transaction: PaymentTransaction }>('/api/payments/checkout', {
         method: 'POST',
         body: JSON.stringify({
@@ -549,20 +622,22 @@ export function FourStepPaymentModal({
                     htmlFor="pay-trxid"
                     className="mb-1 block text-xs font-bold text-slate-700"
                   >
-                    Transaction ID / Bank Slip Reference (TrxID)
+                    {isManualSlip
+                      ? 'Bank Slip / Reference ID (Required)'
+                      : 'Transaction ID (Optional in Sandbox — auto-verified via gateway callback)'}
                   </label>
                   <input
                     id="pay-trxid"
                     type="text"
-                    required
+                    required={isManualSlip}
                     value={trxId}
                     onChange={(e) => setTrxId(e.target.value.toUpperCase())}
-                    placeholder="e.g. BK98X421"
+                    placeholder={isManualSlip ? 'e.g. SLIP-40921' : 'Leave blank for instant sandbox verification, or enter manual TrxID'}
                     className="font-mono-tabular w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm uppercase"
                   />
                   <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
                     <Lock className="h-3 w-3" />
-                    Duplicate TrxID fraud check enabled server-side.
+                    Duplicate TrxID fraud check enabled server-side. Manual entries remain Pending Verification until confirmed.
                   </p>
                 </div>
               )}
@@ -594,12 +669,25 @@ export function FourStepPaymentModal({
 
           {step === 4 && receipt && (
             <div className="space-y-4 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <div
+                className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${
+                  receipt.status === 'pending_verification'
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-emerald-100 text-emerald-600'
+                }`}
+              >
                 <CheckCircle2 className="h-8 w-8" />
               </div>
               <h3 className="text-xl font-extrabold text-slate-900">
-                Official Payment Receipt Issued!
+                {receipt.status === 'pending_verification'
+                  ? 'Payment Submitted — Pending Verification'
+                  : 'Verified Payment Receipt Issued!'}
               </h3>
+              {receipt.status === 'pending_verification' && (
+                <p className="mx-auto max-w-md text-xs text-amber-800">
+                  Your receipt reference has been logged. Access will unlock automatically after gateway webhook settlement or campus admin verification.
+                </p>
+              )}
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left text-xs space-y-2">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Invoice Number</span>
@@ -615,12 +703,18 @@ export function FourStepPaymentModal({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Status</span>
-                  <span className="font-bold uppercase text-emerald-700">
+                  <span
+                    className={`font-bold uppercase ${
+                      receipt.status === 'pending_verification'
+                        ? 'text-amber-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
                     {receipt.status.replace('_', ' ')}
                   </span>
                 </div>
                 <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-extrabold text-slate-900">
-                  <span>Amount Paid</span>
+                  <span>{receipt.status === 'pending_verification' ? 'Amount Submitted' : 'Amount Paid'}</span>
                   <span className="font-mono-tabular">৳{receipt.totalAmount}</span>
                 </div>
               </div>

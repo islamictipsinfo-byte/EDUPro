@@ -162,7 +162,7 @@ export function BatchDetailWorkspace({
   onNotify,
 }: BatchDetailWorkspaceProps) {
   const { apiFetch, token } = useAuth();
-  const canAdminManage = userRole === 'admin' || userRole === 'branch_manager';
+  const canAdminManage = userRole === 'admin';
 
   const [detail, setDetail] = useState<BatchDetailPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -527,10 +527,12 @@ export function BatchDetailWorkspace({
     clearAlerts();
     setDeleteErrorInfo(null);
     try {
-      const activeToken = token || window.localStorage.getItem('aec_auth_token') || '';
+      const headers: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch(`/api/portal/batches/${batchId}/safe`, {
         method: 'DELETE',
-        headers: activeToken ? { Authorization: `Bearer ${activeToken}` } : {},
+        credentials: 'include',
+        headers,
       });
       const json = (await res.json()) as { error?: string; suggestArchive?: boolean };
       if (!res.ok) {
@@ -550,9 +552,11 @@ export function BatchDetailWorkspace({
 
   const handleExportStudentsCsv = async () => {
     try {
-      const activeToken = token || window.localStorage.getItem('aec_auth_token') || '';
+      const headers: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch(`/api/portal/batches/${batchId}/export-students`, {
-        headers: activeToken ? { Authorization: `Bearer ${activeToken}` } : {},
+        credentials: 'include',
+        headers,
       });
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();

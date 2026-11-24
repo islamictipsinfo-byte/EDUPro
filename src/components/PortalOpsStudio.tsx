@@ -1873,13 +1873,17 @@ export function AttendanceFinancePanel({
   onRefresh,
   onNotify,
 }: AttendanceFinancePanelProps) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, token } = useAuth();
   const [tab, setTab] = useState<'attendance' | 'payroll' | 'finance'>('attendance');
   const [targetFilter, setTargetFilter] = useState<'student' | 'teacher'>('student');
   const [attDate, setAttDate] = useState(new Date().toISOString().slice(0, 10));
+  const [attError, setAttError] = useState<string | null>(null);
+  const [correctingRec, setCorrectingRec] = useState<AttendanceRecord | null>(null);
+  const [correctStatus, setCorrectStatus] = useState<AttendanceRecord['status']>('present');
+  const [correctReason, setCorrectReason] = useState('');
 
   // Payroll form
-  const staffUsers = users.filter((u) => u.role === 'teacher' || u.role === 'branch_manager');
+  const staffUsers = users.filter((u) => u.role === 'teacher');
   const [empId, setEmpId] = useState(staffUsers[0]?.id ?? '');
   const [monthKey, setMonthKey] = useState(new Date().toISOString().slice(0, 7));
   const [baseSalary, setBaseSalary] = useState(32000);
@@ -1895,21 +1899,78 @@ export function AttendanceFinancePanel({
   const [finTitle, setFinTitle] = useState('');
   const [finAmount, setFinAmount] = useState(5000);
 
-  const canManageFinance = role === 'admin' || role === 'branch_manager';
+  const canManageFinance = role === 'admin';
 
-  const markAttendance = async (u: User, status: AttendanceRecord['status']) => {
-    await apiFetch('/api/portal/attendance', {
-      method: 'POST',
-      body: JSON.stringify({
-        targetType: u.role === 'student' ? 'student' : 'teacher',
-        targetId: u.id,
-        branchId: u.branchId,
-        date: attDate,
-        status,
-      }),
-    });
-    await onRefresh();
-    onNotify(`${u.name} marked ${status} for ${attDate}.`);
+  const markAttendance = async (
+    u: User,
+    status: AttendanceRecord['status'],
+    opts?: { checkOutTime?: string }
+  ) => {
+    setAttError(null);
+    try {
+      await apiFetch('/api/portal/attendance', {
+        method: 'POST',
+        body: JSON.stringify({
+          targetType: u.role === 'student' ? 'student' : 'teacher',
+          targetId: u.id,
+          branchId: u.branchId,
+          date: attDate,
+          status,
+          checkInTime: new Date().toTimeString().slice(0, 5),
+          checkOutTime: opts?.checkOutTime,
+        }),
+      });
+      await onRefresh();
+      onNotify(`${u.name} marked ${status} for ${attDate}.`);
+    } catch (err) {
+      setAttError(err instanceof Error ? err.message : 'Attendance save failed.');
+    }
+  };
+
+  const submitCorrection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!correctingRec) return;
+    setAttError(null);
+    try {
+      await apiFetch(`/api/portal/attendance/${correctingRec.id}/correct`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: correctStatus,
+          reason: correctReason.trim(),
+        }),
+      });
+      setCorrectingRec(null);
+      setCorrectReason('');
+      await onRefresh();
+      onNotify(`Attendance corrected for ${correctingRec.targetName} with audit reason.`);
+    } catch (err) {
+      setAttError(err instanceof Error ? err.message : 'Correction failed.');
+    }
+  };
+
+  const exportAttendanceCsv = async () => {
+    try {
+      const month = attDate.slice(0, 7);
+      const headers: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`/api/portal/attendance/report?month=${encodeURIComponent(month)}&format=csv`, {
+        credentials: 'include',
+        headers,
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance-${month}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      onNotify(`Exported monthly attendance CSV (${month}).`);
+    } catch {
+      setAttError('Unable to export attendance CSV.');
+    }
   };
 
   const totalIncome = financialRecords
@@ -1920,9 +1981,7 @@ export function AttendanceFinancePanel({
     .reduce((s, f) => s + f.amount, 0);
 
   const visibleAttendanceTargets = users.filter((u) =>
-    targetFilter === 'student'
-      ? u.role === 'student'
-      : u.role === 'teacher' || u.role === 'branch_manager'
+    targetFilter === 'student' ? u.role === 'student' : u.role === 'teacher'
   );
 
   return (
@@ -1975,10 +2034,10 @@ export function AttendanceFinancePanel({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">
-                  Daily Student & Teacher Attendance Sheet
+                  Daily Student &amp; Teacher Attendance Sheet
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Click Present / Absent / Late / Leave with automatic check-in timestamp.
+                  Duplicate check guarded per day. Check-in/out &amp; audited corrections enabled.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1986,6 +2045,7 @@ export function AttendanceFinancePanel({
                   type="date"
                   value={attDate}
                   onChange={(e) => setAttDate(e.target.value)}
+                  aria-label="Attendance date"
                   className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-bold"
                 />
                 <button
@@ -2008,15 +2068,35 @@ export function AttendanceFinancePanel({
                       : 'border border-slate-200 bg-slate-50 text-slate-700'
                   }`}
                 >
-                  Teachers & Staff
+                  Teachers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void exportAttendanceCsv()}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Export Month CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Print Sheet
                 </button>
               </div>
             </div>
 
+            {attError && (
+              <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                {attError}
+              </p>
+            )}
+
             <div className="mt-4 space-y-2.5">
               {visibleAttendanceTargets.length === 0 ? (
                 <p className="py-6 text-center text-xs text-slate-500">
-                  Attendance marking is linked with your branch directory.
+                  No assigned {targetFilter} records found for this view.
                 </p>
               ) : (
                 visibleAttendanceTargets.map((u) => {
@@ -2032,7 +2112,8 @@ export function AttendanceFinancePanel({
                           {u.rollNumber || u.role} ·{' '}
                           {rec ? (
                             <span className="font-bold text-emerald-700">
-                              Marked: {rec.status.toUpperCase()} ({rec.checkInTime})
+                              Marked: {rec.status.toUpperCase()} ({rec.checkInTime || 'Checked'}
+                              {rec.checkOutTime ? ` – Out ${rec.checkOutTime}` : ''})
                             </span>
                           ) : (
                             'Not marked for this date'
@@ -2040,7 +2121,7 @@ export function AttendanceFinancePanel({
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {(['present', 'late', 'absent', 'leave'] as const).map((st) => (
+                        {(['present', 'late', 'absent', 'leave', 'excused'] as const).map((st) => (
                           <button
                             key={st}
                             type="button"
@@ -2058,6 +2139,32 @@ export function AttendanceFinancePanel({
                             {st}
                           </button>
                         ))}
+                        {rec && u.role === 'teacher' && !rec.checkOutTime && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void markAttendance(u, rec.status, {
+                                checkOutTime: new Date().toTimeString().slice(0, 5),
+                              })
+                            }
+                            className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-800 hover:bg-sky-100"
+                          >
+                            Check Out
+                          </button>
+                        )}
+                        {rec && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCorrectingRec(rec);
+                              setCorrectStatus(rec.status);
+                              setCorrectReason('');
+                            }}
+                            className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                          >
+                            Correct
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -2065,6 +2172,54 @@ export function AttendanceFinancePanel({
               )}
             </div>
           </div>
+
+          {correctingRec && (
+            <form
+              onSubmit={submitCorrection}
+              className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-5 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-indigo-950">
+                  Audited Attendance Correction: {correctingRec.targetName} ({correctingRec.date})
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setCorrectingRec(null)}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <select
+                  value={correctStatus}
+                  onChange={(e) => setCorrectStatus(e.target.value as AttendanceRecord['status'])}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold"
+                >
+                  <option value="present">Present</option>
+                  <option value="late">Late</option>
+                  <option value="absent">Absent</option>
+                  <option value="leave">Leave</option>
+                  <option value="excused">Excused</option>
+                </select>
+                <input
+                  type="text"
+                  required
+                  minLength={3}
+                  value={correctReason}
+                  onChange={(e) => setCorrectReason(e.target.value)}
+                  placeholder="Mandatory correction audit reason..."
+                  className="sm:col-span-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
+                />
+              </div>
+              <button
+                type="submit"
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+              >
+                Save Audited Correction
+              </button>
+            </form>
+          )}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
             <h3 className="text-sm font-extrabold text-slate-900">Recent Attendance Logs</h3>
@@ -2079,6 +2234,7 @@ export function AttendanceFinancePanel({
                   </span>
                   <span className="font-bold uppercase text-indigo-700">
                     {a.status} · {a.checkInTime}
+                    {a.checkOutTime ? ` → ${a.checkOutTime}` : ''}
                   </span>
                 </div>
               ))}

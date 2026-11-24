@@ -46,6 +46,7 @@ import type {
   Exam,
   ExamAttempt,
   LearnerRewardProfile,
+  LessonProgressRecord,
   LessonType,
   ScormPackage,
 } from '../types';
@@ -90,6 +91,7 @@ export function LearnPage({ navigate }: LearnPageProps) {
   const [certMsg, setCertMsg] = useState<string | null>(null);
   const [activeCert, setActiveCert] = useState<CourseCertificate | null>(null);
   const [lockedNotice, setLockedNotice] = useState<string | null>(null);
+  const [lessonProgressMap, setLessonProgressMap] = useState<Record<string, LessonProgressRecord>>({});
 
   const loadLearnWorkspace = useCallback(async () => {
     if (!user) return;
@@ -130,6 +132,21 @@ export function LearnPage({ navigate }: LearnPageProps) {
       : data.allCourses
     : [];
   const activeCourse = courses.find((c) => c.id === selectedCourseId) || courses[0];
+
+  useEffect(() => {
+    if (!user || !activeCourse) return;
+    apiFetch<{ progress: LessonProgressRecord[] }>(
+      `/api/portal/lessons/progress?courseId=${encodeURIComponent(activeCourse.id)}`
+    )
+      .then((res) => {
+        const map: Record<string, LessonProgressRecord> = {};
+        for (const item of res.progress ?? []) {
+          map[item.lessonId] = item;
+        }
+        setLessonProgressMap(map);
+      })
+      .catch(() => {});
+  }, [user, activeCourse, apiFetch]);
   const allLessons = useMemo(
     () => (activeCourse && data ? data.lessonsByCourse[activeCourse.id] ?? [] : []),
     [activeCourse, data]
@@ -259,12 +276,28 @@ export function LearnPage({ navigate }: LearnPageProps) {
     setSelectedLessonId(les.id);
   };
 
+  const saveLessonWatchProgress = async (lessonId: string, watchedSeconds: number, durationSeconds: number, completed = false) => {
+    try {
+      const res = await apiFetch<{ progress: LessonProgressRecord }>(
+        `/api/portal/lessons/${encodeURIComponent(lessonId)}/progress`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ watchedSeconds, durationSeconds, completed }),
+        }
+      );
+      setLessonProgressMap((prev) => ({ ...prev, [lessonId]: res.progress }));
+    } catch {
+      // Non-fatal background sync
+    }
+  };
+
   const handleMarkComplete = async () => {
     if (!activeCourse || !activeLesson || !activeEnrollment) return;
     const res = await apiFetch<{ enrollment: Enrollment }>('/api/learn/progress', {
       method: 'POST',
       body: JSON.stringify({ courseId: activeCourse.id, lessonId: activeLesson.id }),
     });
+    await saveLessonWatchProgress(activeLesson.id, 600, 600, true);
     setData((prev) =>
       prev
         ? {
@@ -403,7 +436,12 @@ export function LearnPage({ navigate }: LearnPageProps) {
             )}
           </div>
           <p className="mt-0.5 text-xs font-bold text-slate-900">{les.title}</p>
-          <p className="mt-0.5 font-mono-tabular text-[11px] text-slate-500">{les.duration}</p>
+          <p className="mt-0.5 font-mono-tabular text-[11px] text-slate-500">
+            {les.duration}
+            {lessonProgressMap[les.id]
+              ? ` · ${lessonProgressMap[les.id].percentWatched}% watched`
+              : ''}
+          </p>
         </div>
       </button>
     );
@@ -793,6 +831,32 @@ export function LearnPage({ navigate }: LearnPageProps) {
                   <p className="mt-3 text-sm leading-relaxed text-slate-700">
                     {activeLesson.sheetSummary}
                   </p>
+                  {activeEnrollment && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs">
+                      <span className="font-semibold text-slate-700">
+                        Watch Progress:{' '}
+                        <strong className="font-mono-tabular text-indigo-700">
+                          {lessonProgressMap[activeLesson.id]?.percentWatched ??
+                            (completedIds.includes(activeLesson.id) ? 100 : 0)}
+                          %
+                        </strong>
+                        {lessonProgressMap[activeLesson.id]?.lastPositionAt && (
+                          <span className="ml-2 text-slate-500">
+                            (Last synced{' '}
+                            {new Date(lessonProgressMap[activeLesson.id].lastPositionAt).toLocaleTimeString()}
+                            )
+                          </span>
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void saveLessonWatchProgress(activeLesson.id, 300, 600, false)}
+                        className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50"
+                      >
+                        Save Bookmark (50%)
+                      </button>
+                    </div>
+                  )}
 
                   {activeLesson.resources && activeLesson.resources.length > 0 && (
                     <div className="mt-4 border-t border-slate-100 pt-4">

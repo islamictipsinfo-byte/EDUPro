@@ -143,9 +143,11 @@ export function CourseEnterpriseDashboard({
 
   const handleExportCsv = async () => {
     try {
-      const activeToken = token || window.localStorage.getItem('aec_auth_token') || '';
+      const headers: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch('/api/portal/courses/export-csv', {
-        headers: activeToken ? { Authorization: `Bearer ${activeToken}` } : {},
+        credentials: 'include',
+        headers,
       });
       if (!res.ok) throw new Error('CSV export failed');
       const blob = await res.blob();

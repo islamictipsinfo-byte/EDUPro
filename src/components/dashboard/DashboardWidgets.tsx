@@ -384,13 +384,11 @@ export function QuickActionsCard({
   const items =
     role === 'student'
       ? STUDENT_QUICK_ACTIONS
-      : role === 'branch_manager'
-        ? BRANCH_QUICK_ACTIONS
-        : role === 'guardian'
-          ? GUARDIAN_QUICK_ACTIONS
-          : role === 'teacher'
-            ? TEACHER_QUICK_ACTIONS
-            : ADMIN_QUICK_ACTIONS;
+      : role === 'guardian'
+        ? GUARDIAN_QUICK_ACTIONS
+        : role === 'teacher'
+          ? TEACHER_QUICK_ACTIONS
+          : ADMIN_QUICK_ACTIONS;
 
   return (
     <div

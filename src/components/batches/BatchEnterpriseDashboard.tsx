@@ -143,9 +143,11 @@ export function BatchEnterpriseDashboard({
 
   const handleExportComparison = async () => {
     try {
-      const activeToken = token || window.localStorage.getItem('aec_auth_token') || '';
+      const headers: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch('/api/portal/batches/export-comparison', {
-        headers: activeToken ? { Authorization: `Bearer ${activeToken}` } : {},
+        credentials: 'include',
+        headers,
       });
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
@@ -310,7 +312,7 @@ export function BatchEnterpriseDashboard({
               <Printer className="h-3.5 w-3.5" />
               <span>Print PDF</span>
             </button>
-            {(userRole === 'admin' || userRole === 'branch_manager') && (
+            {userRole === 'admin' && (
               <button
                 type="button"
                 onClick={() => onOpenWizard(null)}
@@ -490,7 +492,7 @@ export function BatchEnterpriseDashboard({
                             <ExternalLink className="h-3 w-3" />
                             <span>Manage (12 Tabs)</span>
                           </button>
-                          {(userRole === 'admin' || userRole === 'branch_manager') && (
+                          {userRole === 'admin' && (
                             <button
                               type="button"
                               aria-label={`Edit ${bat.name}`}

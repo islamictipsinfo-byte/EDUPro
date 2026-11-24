@@ -30,6 +30,7 @@ export function ExamsPage({ navigate }: ExamsPageProps) {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [review, setReview] = useState<SubmissionReview | null>(null);
+  const [examError, setExamError] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<{ userId: string; displayName: string; xp: number; streakDays: number }[]>([]);
 
   useEffect(() => {
@@ -79,16 +80,29 @@ export function ExamsPage({ navigate }: ExamsPageProps) {
     );
   }
 
-  const startExam = (exam: Exam) => {
+  const startExam = async (exam: Exam) => {
     setReview(null);
+    setExamError(null);
     setAnswers({});
     setActiveExam(exam);
     setSecondsLeft(exam.durationMinutes * 60);
+    try {
+      const res = await apiFetch<{ remainingSeconds: number }>(
+        `/api/portal/exams/${encodeURIComponent(exam.id)}/start`,
+        { method: 'POST' }
+      );
+      if (typeof res.remainingSeconds === 'number') {
+        setSecondsLeft(res.remainingSeconds);
+      }
+    } catch (err) {
+      setExamError(err instanceof Error ? err.message : 'Could not sync exam timer with server.');
+    }
   };
 
   const submitExam = async () => {
     if (!activeExam || submitting) return;
     setSubmitting(true);
+    setExamError(null);
     try {
       const res = await apiFetch<SubmissionReview>(`/api/exams/${activeExam.id}/submit`, {
         method: 'POST',
@@ -97,6 +111,8 @@ export function ExamsPage({ navigate }: ExamsPageProps) {
       setReview(res);
       setAttempts((prev) => [res.attempt, ...prev]);
       setActiveExam(null);
+    } catch (err) {
+      setExamError(err instanceof Error ? err.message : 'Exam submission failed.');
     } finally {
       setSubmitting(false);
     }
@@ -134,6 +150,12 @@ export function ExamsPage({ navigate }: ExamsPageProps) {
                 </button>
               </div>
             </div>
+
+            {examError && (
+              <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">
+                {examError}
+              </p>
+            )}
 
             <div className="mt-6 space-y-6">
               {activeExam.questions.map((q, idx) => (

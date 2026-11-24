@@ -95,8 +95,10 @@ test('gradeExamSubmission scores answers accurately and assigns letter grades', 
 test('canRoleAccessPortalSection enforces strict multi-role RBAC boundaries', () => {
   assert.equal(canRoleAccessPortalSection('admin', 'settings'), true);
   assert.equal(canRoleAccessPortalSection('admin', 'users'), true);
-  assert.equal(canRoleAccessPortalSection('branch_manager', 'enrollments'), true);
-  assert.equal(canRoleAccessPortalSection('branch_manager', 'settings'), false);
+  assert.equal(canRoleAccessPortalSection('admin', 'academic_ops'), true);
+  assert.equal(canRoleAccessPortalSection('admin', 'integrations'), true);
+  assert.equal(canRoleAccessPortalSection('branch_manager' as never, 'enrollments'), false);
+  assert.equal(canRoleAccessPortalSection('branch_manager' as never, 'settings'), false);
   assert.equal(canRoleAccessPortalSection('teacher', 'exams'), true);
   assert.equal(canRoleAccessPortalSection('teacher', 'courses'), true);
   assert.equal(canRoleAccessPortalSection('teacher', 'catalog_cms'), true);
@@ -105,17 +107,18 @@ test('canRoleAccessPortalSection enforces strict multi-role RBAC boundaries', ()
   assert.equal(canRoleAccessPortalSection('teacher', 'enrollments'), true);
   assert.equal(canRoleAccessPortalSection('teacher', 'branches'), false);
   assert.equal(canRoleAccessPortalSection('teacher', 'users'), false);
+  assert.equal(canRoleAccessPortalSection('teacher', 'integrations'), false);
   assert.equal(canRoleAccessPortalSection('student', 'my_learning'), true);
   assert.equal(canRoleAccessPortalSection('student', 'users'), false);
   assert.equal(canRoleAccessPortalSection('guardian', 'guardian_monitor'), true);
   assert.equal(canRoleAccessPortalSection('guardian', 'exams'), false);
   assert.equal(canRoleAccessPortalSection('admin', 'activity_logs'), true);
-  assert.equal(canRoleAccessPortalSection('branch_manager', 'activity_logs'), false);
+  assert.equal(canRoleAccessPortalSection('branch_manager' as never, 'activity_logs'), false);
   assert.equal(canRoleAccessPortalSection('teacher', 'activity_logs'), false);
   assert.equal(canRoleAccessPortalSection('student', 'activity_logs'), false);
   assert.equal(canRoleAccessPortalSection('guardian', 'activity_logs'), false);
   assert.equal(canRoleAccessPortalSection('admin', 'profile'), true);
-  assert.equal(canRoleAccessPortalSection('branch_manager', 'profile'), true);
+  assert.equal(canRoleAccessPortalSection('branch_manager' as never, 'profile'), false);
   assert.equal(canRoleAccessPortalSection('teacher', 'profile'), true);
   assert.equal(canRoleAccessPortalSection('student', 'profile'), true);
   assert.equal(canRoleAccessPortalSection('guardian', 'profile'), true);
@@ -307,7 +310,7 @@ test('computeBatchSeatUsage computes remaining seats and fill percentage accurat
 test('canRoleAccessPortalSection restricts homepage_cms strictly to admin', () => {
   assert.equal(canRoleAccessPortalSection('admin', 'homepage_cms'), true);
   assert.equal(canRoleAccessPortalSection('teacher', 'homepage_cms'), false);
-  assert.equal(canRoleAccessPortalSection('branch_manager', 'homepage_cms'), false);
+  assert.equal(canRoleAccessPortalSection('branch_manager' as never, 'homepage_cms'), false);
   assert.equal(canRoleAccessPortalSection('student', 'homepage_cms'), false);
   assert.equal(canRoleAccessPortalSection('guardian', 'homepage_cms'), false);
 });
@@ -449,7 +452,7 @@ test('maskSecretValue, filterActivePaymentGateways, and payments portal RBAC wor
   );
 
   assert.equal(canRoleAccessPortalSection('admin', 'payments'), true);
-  assert.equal(canRoleAccessPortalSection('branch_manager', 'payments'), true);
+  assert.equal(canRoleAccessPortalSection('branch_manager' as never, 'payments'), false);
   assert.equal(canRoleAccessPortalSection('student', 'payments'), false);
   assert.equal(canRoleAccessPortalSection('teacher', 'payments'), false);
 });

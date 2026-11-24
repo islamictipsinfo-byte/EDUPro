@@ -22,7 +22,6 @@ export interface UserRoleSummary {
   active: number;
   suspended: number;
   admin: number;
-  branch_manager: number;
   teacher: number;
   student: number;
   guardian: number;
@@ -52,7 +51,6 @@ export function computeUserRoleSummary(users: User[]): UserRoleSummary {
     active: 0,
     suspended: 0,
     admin: 0,
-    branch_manager: 0,
     teacher: 0,
     student: 0,
     guardian: 0,
@@ -63,7 +61,9 @@ export function computeUserRoleSummary(users: User[]): UserRoleSummary {
     } else {
       summary.active += 1;
     }
-    summary[u.role] += 1;
+    if (u.role === 'admin' || u.role === 'teacher' || u.role === 'student' || u.role === 'guardian') {
+      summary[u.role] += 1;
+    }
   }
   return summary;
 }

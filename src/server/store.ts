@@ -1,7 +1,5 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import fs from 'node:fs';
-import path from 'node:path';
 import type {
   ApiPlugin,
   AttendanceRecord,
@@ -57,97 +55,44 @@ import {
   normalizeHeaderMenu,
 } from '../lib/domain';
 import { enrichAuditLogEntry } from '../lib/auditLogs';
+import {
+  hashPassword as dbHashPassword,
+  loadOrInitializeDatabase,
+  persistStateToSqlite,
+  verifyPassword as dbVerifyPassword,
+  writeVerifiedDiskBackup,
+} from '../db/persistence';
+import { createDefaultAcademicCollections, createDefaultIntegrations } from './integrationSeed';
 import { createExtendedSeedCollections } from './seedExtensions';
+import type { ContactMessage, DatabaseState, StoredUser } from './storeTypes';
 
-export interface StoredUser extends User {
-  passwordHash: string;
-}
-
-export interface ContactMessage {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  branchId: string;
-  message: string;
-  createdAt: string;
-}
-
-export interface DatabaseState {
-  settings: SiteSettings;
-  branches: Branch[];
-  users: StoredUser[];
-  instructors: Instructor[];
-  courses: Course[];
-  batches: CourseBatch[];
-  batchWaitlists: BatchWaitlistEntry[];
-  batchTransfers: BatchTransferRecord[];
-  batchNotifications: BatchNotification[];
-  batchActivityLogs: BatchActivityLog[];
-  modules: CourseModule[];
-  chapters: CourseChapter[];
-  lessons: CourseLesson[];
-  assignments: CourseAssignment[];
-  assignmentSubmissions: AssignmentSubmission[];
-  announcements: CourseAnnouncement[];
-  certificates: CourseCertificate[];
-  exams: Exam[];
-  examAttempts: ExamAttempt[];
-  questionBank: QuestionBankItem[];
-  products: Product[];
-  ebooks: Ebook[];
-  categories: CategoryItem[];
-  posts: CommunityPost[];
-  scormPackages: ScormPackage[];
-  scormAttempts: ScormAttempt[];
-  rewardsByUser: Record<string, LearnerRewardProfile>;
-  attendance: AttendanceRecord[];
-  payrolls: PayrollRecord[];
-  financialRecords: FinancialRecord[];
-  paymentGateways: PaymentGatewayConfig[];
-  transactions: PaymentTransaction[];
-  enrollments: Enrollment[];
-  orders: Order[];
-  coupons: Coupon[];
-  reviews: Review[];
-  results: CenterResultRecord[];
-  claimedEbooksByUser: Record<string, string[]>;
-  contactMessages: ContactMessage[];
-  backups: BackupSnapshot[];
-  recycleBin: RecycleBinItem[];
-  auditLogs: AuditLogEntry[];
-  campaigns: BroadcastCampaign[];
-  plugins: ApiPlugin[];
-  webhooks: WebhookConfig[];
-  mediaAssets: MediaAsset[];
-}
-
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
+export type { ContactMessage, DatabaseState, StoredUser };
 
 export function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `${salt}:${hash}`;
+  return dbHashPassword(password);
 }
 
 export function verifyPassword(password: string, stored: string): boolean {
-  const parts = stored.split(':');
-  if (parts.length !== 2) return false;
-  const [salt, key] = parts;
-  const derived = crypto.scryptSync(password, salt, 64);
-  const keyBuf = Buffer.from(key, 'hex');
-  if (derived.length !== keyBuf.length) return false;
-  return crypto.timingSafeEqual(derived, keyBuf);
+  return dbVerifyPassword(password, stored);
 }
 
 export function sanitizeUser(user: StoredUser): User {
-  const { passwordHash: _ignored, ...safe } = user;
+  const {
+    passwordHash: _ignored,
+    twoFactorSecret: _secret,
+    twoFactorRecoveryHashes: _rec,
+    passwordUpdatedAt: _pwAt,
+    ...safe
+  } = user;
   return safe;
 }
 
 function createInitialState(): DatabaseState {
-  const demoPass = 'Aloms@2026';
+  const now = new Date().toISOString();
+  const envAdminEmail = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase();
+  const envAdminPass = (process.env.ADMIN_PASSWORD ?? '').trim();
+  const adminPasswordHash = envAdminPass.length >= 10 ? hashPassword(envAdminPass) : '';
+  const randomSeedPass = () => hashPassword(crypto.randomBytes(18).toString('base64url'));
 
   const branches: Branch[] = [
     {
@@ -189,23 +134,17 @@ function createInitialState(): DatabaseState {
     {
       id: 'u-admin',
       name: 'Alomgir Hossain',
-      email: 'admin@alomsenglish.com',
+      email: envAdminEmail || 'admin@alomsenglish.com',
       phone: '01710000001',
       role: 'admin',
       branchId: null,
       avatar: '/src/assets/images/instructor_portrait_lead_1795411661581.jpg',
-      passwordHash: hashPassword(demoPass),
+      passwordHash: adminPasswordHash,
+      passwordUpdatedAt: adminPasswordHash ? now : null,
+      mustResetPassword: !adminPasswordHash,
+      twoFactorEnabled: false,
+      communicationConsent: { email: true, sms: true, whatsapp: true },
       createdAt: '2026-01-05T09:00:00.000Z',
-    },
-    {
-      id: 'u-manager',
-      name: 'Tariqul Islam',
-      email: 'manager@alomsenglish.com',
-      phone: '01710000002',
-      role: 'branch_manager',
-      branchId: 'br-mirpur',
-      passwordHash: hashPassword(demoPass),
-      createdAt: '2026-01-06T09:00:00.000Z',
     },
     {
       id: 'u-teacher',
@@ -215,7 +154,8 @@ function createInitialState(): DatabaseState {
       role: 'teacher',
       branchId: 'br-mirpur',
       avatar: '/src/assets/images/instructor_portrait_lead_1795411661581.jpg',
-      passwordHash: hashPassword(demoPass),
+      passwordHash: randomSeedPass(),
+      communicationConsent: { email: true, sms: true, whatsapp: true },
       createdAt: '2026-01-07T09:00:00.000Z',
     },
     {
@@ -226,7 +166,8 @@ function createInitialState(): DatabaseState {
       role: 'student',
       branchId: 'br-mirpur',
       rollNumber: 'AEC-2026-101',
-      passwordHash: hashPassword(demoPass),
+      passwordHash: randomSeedPass(),
+      communicationConsent: { email: true, sms: true, whatsapp: true },
       createdAt: '2026-01-10T09:00:00.000Z',
     },
     {
@@ -237,7 +178,8 @@ function createInitialState(): DatabaseState {
       role: 'student',
       branchId: 'br-uttara',
       rollNumber: 'AEC-2026-102',
-      passwordHash: hashPassword(demoPass),
+      passwordHash: randomSeedPass(),
+      communicationConsent: { email: true, sms: true, whatsapp: true },
       createdAt: '2026-01-12T09:00:00.000Z',
     },
     {
@@ -248,7 +190,8 @@ function createInitialState(): DatabaseState {
       role: 'guardian',
       branchId: 'br-mirpur',
       guardianLinkedStudentIds: ['u-student'],
-      passwordHash: hashPassword(demoPass),
+      passwordHash: randomSeedPass(),
+      communicationConsent: { email: true, sms: true, whatsapp: true },
       createdAt: '2026-01-11T09:00:00.000Z',
     },
   ];
@@ -1324,11 +1267,20 @@ function createInitialState(): DatabaseState {
     appliesTo: c.appliesTo ?? ('all' as const),
   }));
 
+  const academic = createDefaultAcademicCollections();
+
   return {
     settings,
     branches,
+    branchStatusHistory: [],
     users,
+    revokedLegacyAccounts: [],
     instructors,
+    academicYears: academic.academicYears,
+    academicClasses: academic.academicClasses,
+    academicSubjects: academic.academicSubjects,
+    courseRoutines: academic.courseRoutines,
+    studentAdmissions: academic.studentAdmissions,
     courses,
     batches,
     batchWaitlists: [],
@@ -1362,11 +1314,13 @@ function createInitialState(): DatabaseState {
     modules,
     chapters,
     lessons,
+    lessonProgress: [],
     assignments,
     assignmentSubmissions,
     announcements,
     certificates,
     exams,
+    examSessionTimers: [],
     examAttempts,
     questionBank: ext.questionBank,
     products,
@@ -1377,9 +1331,12 @@ function createInitialState(): DatabaseState {
     scormAttempts: ext.scormAttempts,
     rewardsByUser: ext.rewardsByUser,
     attendance: ext.attendance,
+    attendanceCorrections: [],
     payrolls: ext.payrolls,
     financialRecords: ext.financialRecords,
+    feeInvoices: academic.feeInvoices,
     paymentGateways: ext.paymentGateways,
+    paymentSessions: [],
     transactions: ext.transactions,
     enrollments,
     orders,
@@ -1390,6 +1347,9 @@ function createInitialState(): DatabaseState {
       'u-student': ['ebk-1', 'ebk-3'],
     },
     contactMessages: [],
+    integrations: createDefaultIntegrations(),
+    communicationLogs: [],
+    inAppNotifications: [],
     backups: [],
     recycleBin: [],
     auditLogs: ext.auditLogs,
@@ -1512,143 +1472,26 @@ export function createDefaultHomepageConfig(): HomepageConfig {
 }
 
 let cachedState: DatabaseState | null = null;
+let cachedSqlitePath: string | null = null;
 
 export function getDb(): DatabaseState {
-  if (cachedState) return cachedState;
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (fs.existsSync(DB_FILE)) {
-    try {
-      const raw = fs.readFileSync(DB_FILE, 'utf8');
-      const parsed = JSON.parse(raw) as DatabaseState;
-      const fallback = createInitialState();
-      if (!Array.isArray(parsed.batches)) parsed.batches = fallback.batches;
-      if (!parsed.settings.homepageConfig) {
-        parsed.settings.homepageConfig = createDefaultHomepageConfig();
-      }
-      parsed.settings.logoUrl = parsed.settings.logoUrl || fallback.settings.logoUrl;
-      parsed.settings.footerLinks = parsed.settings.footerLinks ?? fallback.settings.footerLinks;
-      parsed.settings.headerMenu = normalizeHeaderMenu(parsed.settings.headerMenu, fallback.settings.headerMenu);
-      parsed.settings.socialLinks = parsed.settings.socialLinks ?? fallback.settings.socialLinks;
-      parsed.settings.customPages = parsed.settings.customPages ?? fallback.settings.customPages;
-      parsed.settings.dashboardConfig = normalizeDashboardConfig(
-        parsed.settings.dashboardConfig,
-        DEFAULT_DASHBOARD_CONFIG
-      );
-      parsed.settings.heroSlides = (parsed.settings.heroSlides ?? []).map((s) => ({
-        ...s,
-        active: s.active !== false,
-      }));
-      parsed.instructors = (parsed.instructors ?? fallback.instructors).map((inst) => {
-        if (inst.userId) return inst;
-        if (inst.id === 'inst-1') return { ...inst, userId: 'u-admin' };
-        if (inst.id === 'inst-2') return { ...inst, userId: 'u-teacher' };
-        return inst;
-      });
-      parsed.courses = (parsed.courses ?? fallback.courses).map((c) => ({
-        ...c,
-        visibility: c.visibility ?? 'public',
-        enrollmentAvailability: c.enrollmentAvailability ?? 'open',
-      }));
-      parsed.lessons = (parsed.lessons ?? []).map((l) => ({
-        ...l,
-        lessonType: l.lessonType ?? 'recorded',
-        status: l.status ?? 'published',
-        completionRequired: l.completionRequired !== false,
-      }));
-      if (!Array.isArray(parsed.modules) || parsed.modules.length === 0) {
-        const modMap = new Map<string, CourseModule>();
-        for (const l of parsed.lessons) {
-          const modName = (l.moduleName || 'Module 1: Core Curriculum').trim();
-          const key = `${l.courseId}::${modName.toLowerCase()}`;
-          if (!modMap.has(key)) {
-            const countInCourse = Array.from(modMap.values()).filter((m) => m.courseId === l.courseId).length;
-            modMap.set(key, {
-              id: `mod-${l.courseId}-${countInCourse + 1}`,
-              courseId: l.courseId,
-              title: modName,
-              orderIndex: countInCourse + 1,
-              status: 'published',
-            });
-          }
-          l.moduleId = modMap.get(key)!.id;
-        }
-        parsed.modules = Array.from(modMap.values());
-      }
-      if (!Array.isArray(parsed.chapters)) parsed.chapters = fallback.chapters;
-      if (!Array.isArray(parsed.assignments)) parsed.assignments = fallback.assignments;
-      if (!Array.isArray(parsed.assignmentSubmissions)) parsed.assignmentSubmissions = [];
-      if (!Array.isArray(parsed.announcements)) parsed.announcements = fallback.announcements;
-      if (!Array.isArray(parsed.certificates)) parsed.certificates = [];
-      parsed.ebooks = (parsed.ebooks ?? []).map((eb) => ({
-        ...eb,
-        status: eb.status ?? 'active',
-        salesCount: eb.salesCount ?? 0,
-        fileSize: eb.fileSize ?? '2.4 MB',
-        pdfUrl: eb.pdfUrl ?? '',
-      }));
-      parsed.reviews = (parsed.reviews ?? []).map((r) => ({
-        ...r,
-        status: r.status ?? 'approved',
-        verified: r.verified ?? true,
-      }));
-      parsed.questionBank = parsed.questionBank ?? fallback.questionBank;
-      parsed.categories = parsed.categories ?? fallback.categories;
-      parsed.posts = parsed.posts ?? fallback.posts;
-      parsed.scormPackages = parsed.scormPackages ?? fallback.scormPackages;
-      parsed.scormAttempts = parsed.scormAttempts ?? fallback.scormAttempts;
-      parsed.rewardsByUser = parsed.rewardsByUser ?? fallback.rewardsByUser;
-      parsed.attendance = parsed.attendance ?? fallback.attendance;
-      parsed.payrolls = parsed.payrolls ?? fallback.payrolls;
-      parsed.financialRecords = parsed.financialRecords ?? fallback.financialRecords;
-      parsed.paymentGateways = parsed.paymentGateways ?? fallback.paymentGateways;
-      parsed.transactions = parsed.transactions ?? fallback.transactions;
-      parsed.backups = parsed.backups ?? [];
-      parsed.recycleBin = parsed.recycleBin ?? [];
-      parsed.auditLogs = (parsed.auditLogs ?? fallback.auditLogs).map(enrichAuditLogEntry);
-      parsed.campaigns = parsed.campaigns ?? fallback.campaigns;
-      parsed.plugins = parsed.plugins ?? fallback.plugins;
-      parsed.webhooks = parsed.webhooks ?? fallback.webhooks;
-      parsed.mediaAssets = Array.isArray(parsed.mediaAssets) ? parsed.mediaAssets : [];
-      if (!Array.isArray(parsed.batchWaitlists)) parsed.batchWaitlists = [];
-      if (!Array.isArray(parsed.batchTransfers)) parsed.batchTransfers = [];
-      if (!Array.isArray(parsed.batchNotifications)) parsed.batchNotifications = fallback.batchNotifications;
-      if (!Array.isArray(parsed.batchActivityLogs)) parsed.batchActivityLogs = fallback.batchActivityLogs;
-      parsed.batches = (parsed.batches ?? fallback.batches).map((b) => ({
-        ...b,
-        lifecycleStatus:
-          b.lifecycleStatus ??
-          (b.status === 'running'
-            ? 'active'
-            : b.status === 'closed'
-              ? 'enrollment_closed'
-              : 'enrollment_open'),
-        batchType:
-          b.batchType ??
-          (b.mode === 'Online Live' ? 'Online' : b.mode === 'Offline Branch' ? 'Offline' : 'Hybrid'),
-        waitlistEnabled: b.waitlistEnabled ?? true,
-        minStudents: b.minStudents ?? 10,
-      }));
-      cachedState = parsed;
-      return cachedState;
-    } catch {
-      // Fall back to fresh seed if corrupted
-    }
-  }
-  cachedState = createInitialState();
-  saveDb(cachedState);
+  const currentTarget = process.env.SQLITE_DB_PATH || 'default';
+  if (cachedState && cachedSqlitePath === currentTarget) return cachedState;
+  cachedState = loadOrInitializeDatabase(createInitialState);
+  cachedSqlitePath = currentTarget;
   return cachedState;
 }
 
 export function saveDb(state: DatabaseState): void {
   cachedState = state;
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), 'utf8');
+  cachedSqlitePath = process.env.SQLITE_DB_PATH || 'default';
+  persistStateToSqlite(state);
 }
 
 export function resetDbToDefaults(): DatabaseState {
-  cachedState = createInitialState();
-  saveDb(cachedState);
-  return cachedState;
+  const fresh = createInitialState();
+  saveDb(fresh);
+  return fresh;
 }
 
 const auditEventBus = new EventEmitter();
@@ -1696,7 +1539,7 @@ export function createVerifiedBackupSnapshot(
 ): BackupSnapshot {
   const clone = { ...db, backups: [] };
   const payloadJson = JSON.stringify(clone);
-  const checksumSha256 = crypto.createHash('sha256').update(payloadJson).digest('hex');
+  const { checksumSha256 } = writeVerifiedDiskBackup(label, payloadJson);
   const snapshot: BackupSnapshot = {
     id: `bkp-${Date.now()}`,
     label,
@@ -1726,4 +1569,5 @@ export function verifyBackupSnapshotIntegrity(snapshot: BackupSnapshot): boolean
   const computed = crypto.createHash('sha256').update(snapshot.payloadJson).digest('hex');
   return computed === snapshot.checksumSha256;
 }
+
 

@@ -164,22 +164,10 @@ test('student dashboard builders compute student-specific KPIs, progress, analyt
   assert.equal(upcoming[0].timeText, 'LIVE NOW');
 });
 
-test('branch_manager dashboard builders reflect branch-scoped metrics and analytics', () => {
-  const branchData: DashboardSourceData = {
-    role: 'branch_manager',
-    metrics: { branchStudents: 145, branchTeachers: 9, branchCourses: 4, activeBatches: 6 },
-    branch: {
-      id: 'br-1',
-      name: 'Mirpur Campus',
-      code: 'AEC-MPR',
-      city: 'Dhaka',
-      address: 'Mirpur 10',
-      phone: '01700000000',
-      managerName: 'Karim Hasan',
-      activeStudents: 145,
-      status: 'active',
-      image: '/uploads/campus.jpg',
-    },
+test('admin dashboard builders compute real database figures without fake minimum floors', () => {
+  const adminData: DashboardSourceData = {
+    role: 'admin',
+    metrics: { totalCourses: 1, totalBatches: 1, enrollments: 1, activeBranches: 1, totalStudents: 1 },
     courses: [baseCourse],
     batches: [baseBatch],
     enrollments: [baseEnrollment],
@@ -205,19 +193,20 @@ test('branch_manager dashboard builders reflect branch-scoped metrics and analyt
     ],
   };
 
-  const kpis = buildFuturisticKpiCards(branchData);
-  assert.equal(kpis[0].label, 'Branch Students');
-  assert.equal(kpis[0].valueDisplay, '145');
-  assert.equal(kpis[1].label, 'Branch Faculty');
-  assert.equal(kpis[1].valueDisplay, '9');
-  assert.equal(kpis[3].label, 'Active Batches');
+  const kpis = buildFuturisticKpiCards(adminData);
+  assert.equal(kpis[0].label, 'Total Students');
+  assert.equal(kpis[0].valueDisplay, '1');
+  assert.notEqual(kpis[0].valueDisplay, '3570');
+  assert.equal(kpis[1].label, 'Total Teachers');
+  assert.equal(kpis[2].label, 'Total Courses');
+  assert.equal(kpis[2].valueDisplay, '1');
+  assert.equal(kpis[3].label, 'Total Batches');
   assert.equal(kpis[3].valueDisplay, '1');
 
-  const overview = buildAnalyticsOverviewSeries(branchData, 'This Quarter');
-  assert.deepEqual(overview.seriesLabels, ['Branch Students', 'Enrollments', 'Attendance Logs']);
-  assert.equal(overview.highlightValue, 145);
+  const overview = buildAnalyticsOverviewSeries(adminData, 'This Quarter');
+  assert.deepEqual(overview.seriesLabels, ['Students', 'Approved Enrollments', 'Lessons']);
 
-  const feed = buildRecentActivityFeed(branchData);
+  const feed = buildRecentActivityFeed(adminData);
   assert.ok(feed.some((item) => item.text.includes('INV-900')));
 });
 

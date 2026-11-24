@@ -25,6 +25,8 @@ export type PortalSection =
   | 'attendance_finance'
   | 'enrollments'
   | 'branches'
+  | 'academic_ops'
+  | 'integrations'
   | 'users'
   | 'orders'
   | 'ai_ecosystem'
@@ -46,23 +48,14 @@ const ROLE_PORTAL_MATRIX: Record<UserRole, PortalSection[]> = {
     'attendance_finance',
     'enrollments',
     'branches',
+    'academic_ops',
+    'integrations',
     'users',
     'orders',
     'ai_ecosystem',
     'activity_logs',
     'profile',
     'settings',
-  ],
-  branch_manager: [
-    'overview',
-    'courses',
-    'payments',
-    'attendance_finance',
-    'enrollments',
-    'branches',
-    'users',
-    'orders',
-    'profile',
   ],
   teacher: [
     'overview',

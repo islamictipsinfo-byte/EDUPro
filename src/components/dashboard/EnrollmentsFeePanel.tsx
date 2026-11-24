@@ -72,7 +72,7 @@ export function EnrollmentsFeePanel({
   onNotify,
 }: EnrollmentsFeePanelProps) {
   const { apiFetch } = useAuth();
-  const canManage = role === 'admin' || role === 'branch_manager';
+  const canManage = role === 'admin';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Enrollment['status']>('all');
@@ -153,10 +153,7 @@ export function EnrollmentsFeePanel({
 
   const openCreateModal = () => {
     const defaultCourse = courses.find((c) => isCourseStatusLive(c.status)) || courses[0];
-    const defaultBranch =
-      role === 'branch_manager' && userBranchId
-        ? userBranchId
-        : activeBranches[0]?.id || branches[0]?.id || 'online';
+    const defaultBranch = activeBranches[0]?.id || branches[0]?.id || 'online';
     const defaultBatch = batches.find(
       (b) => b.courseId === defaultCourse?.id && b.status !== 'closed' && !computeBatchSeatUsage(b).isFull
     );
@@ -972,7 +969,6 @@ export function EnrollmentsFeePanel({
                   <select
                     id="enr-branch"
                     value={branchId}
-                    disabled={role === 'branch_manager'}
                     onChange={(e) => setBranchId(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold disabled:bg-slate-100"
                   >

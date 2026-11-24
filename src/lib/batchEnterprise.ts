@@ -609,9 +609,6 @@ export function redactBatchForViewer(
   const isPrivileged = (() => {
     if (!viewer) return false;
     if (viewer.role === 'admin') return true;
-    if (viewer.role === 'branch_manager' && (!viewer.branchId || viewer.branchId === batch.branchId)) {
-      return true;
-    }
     if (viewer.role === 'teacher') {
       const assigned = getTeacherAssignedBatches(viewer, [batch], instructors);
       if (assigned.length > 0) return true;
